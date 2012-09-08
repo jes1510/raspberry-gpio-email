@@ -41,15 +41,7 @@ mail.login(login, password)
 mail.list()
 mail.select('inbox')
 
-while True:    
-    print 'Checking email...'    
-    result, data = mail.uid('search', None, "ALL") 
-    latest_email_uid = data[0].split()[-1]
-    result, data = mail.uid('fetch', latest_email_uid, '(RFC822)')
-    raw_email = data[0][1]
-   # print raw_email
-
-    def get_first_text_block(email_message_instance):
+def get_first_text_block(email_message_instance):
         maintype = email_message_instance.get_content_maintype()
         if maintype == 'multipart':
             for part in email_message_instance.get_payload():
@@ -59,12 +51,15 @@ while True:
         elif maintype == 'text':
             return email_message_instance.get_payload()
 
-
+while True:    
+    print 'Checking email...'    
+    result, data = mail.uid('search', None, "ALL") 
+    latest_email_uid = data[0].split()[-1]
+    result, data = mail.uid('fetch', latest_email_uid, '(RFC822)')
+    raw_email = data[0][1]   
     email_message = email.message_from_string(raw_email)
-
-    print '________________'
     text = get_first_text_block(email_message)
-    print text
+    
     if 'on' in text :
         print 'On'
         GPIO.output(11, True)
