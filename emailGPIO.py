@@ -1,3 +1,4 @@
+#!/usr/bin/python
 '''
 Written by Jesse Merritt www.github.com/jes1510 September 8 , 2012
 
@@ -24,13 +25,17 @@ import RPi.GPIO as GPIO
 import time
 import imaplib
 import email
+import sys
 
 GPIO.setmode(GPIO.BOARD)
 GPIO.setup(11, GPIO.OUT)
 GPIO.output(11, False)
 
+login = sys.argv[1]
+password = sys.argv[2]
+
 mail = imaplib.IMAP4_SSL('imap.gmail.com')
-mail.login('sample@gmail.com', '******')
+mail.login(login, password)
 mail.list()
 mail.select('inbox')
 
