@@ -34,6 +34,7 @@ config = ConfigParser.SafeConfigParser()
 config.read('emailGPIO.cfg')
 whiteList = {}
 whiteList = config.get('Email', 'WhiteList').split(' ')
+sleepTime = config.getint('Email', 'Interval')
 outPin = config.getint('Hardware', 'Output')
 
 GPIO.setmode(GPIO.BOARD)
@@ -48,11 +49,10 @@ mail.login(login, password)
 
 
 def get_sender(email_message) :
-    sender = email.utils.parseaddr(email_message['From'])
+    sender = email.utils.parseaddr(email_message['From'])    
     name = sender[0]
     addr = sender[1]
-    return name, addr
-    
+    return name, addr   
 
 
 def get_first_text_block(email_message_instance):
@@ -75,28 +75,32 @@ while True:
         result, data = mail.uid('fetch', latest_email_uid, '(RFC822)')
         raw_email = data[0][1]   
         email_message = email.message_from_string(raw_email)
-        name, sender = get_sender(email_message)        
-        if sender in whiteList :
+        name, sender = get_sender(email_message)
+        subj = email.utils.parseaddr(email_message['Subject'])[1]        
+        if sender in whiteList and subj = 'gpio':
             print 'Command received from ' + name + ' (' + sender + ')'
             text = get_first_text_block(email_message)
             
             if 'on' in text :
-                print 'On'
+                print '     --> On'
                 GPIO.output(outPin, True)
 
             if 'off' in text :
-                print 'Off'
+                print '      --> Off'
                 GPIO.output(outPin, False)
 
+            if 'status'  in text :
+                print '      --> Status'
+
             if 'pulse' in text :
-                print 'Pulse'
+                print '      --> Pulse'
                 GPIO.output(outPin, False)
                 time.sleep(1)
                 GPIO.output(outPin, True)
                 time.sleep(1)
                 GPIO.output(outPin, False)
 
-    #time.sleep(30)
+    time.sleep(sleepTime)
 
 
 
