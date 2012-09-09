@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# -*- coding: utf-8 -*-
 '''
 Written by Jesse Merritt 
 www.github.com/jes1510 
@@ -14,10 +15,9 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/
 
-Toggles GPIO pin based on contents of an email
-IMAP is used to check the contents of a gMail account.
-A GPIO pin is toggled depending on the contents of the body
-of the last email received.
+Toggles GPIO pin based on contents of an email received over IMAP.
+The sender must be listed in the 'WhiteList' in the 'Email' section
+of the configuration file.  
 
 Based heavily on example code here:
 http://yuji.wordpress.com/2011/06/22/python-imaplib-imap-example-with-gmail/
@@ -28,18 +28,32 @@ import time
 import imaplib
 import email
 import sys
+import ConfigParser
+
+config = ConfigParser.SafeConfigParser()
+config.read('emailGPIO.cfg')
+whiteList = {}
+whiteList = config.get('Email', 'WhiteList').split(' ')
+outPin = config.getint('Hardware', 'Output')
 
 GPIO.setmode(GPIO.BOARD)
-GPIO.setup(11, GPIO.OUT)
-GPIO.output(11, False)
+GPIO.setup(outPin, GPIO.OUT)
+GPIO.output(outPin, False)
 
 login = sys.argv[1]
 password = sys.argv[2]
 
 mail = imaplib.IMAP4_SSL('imap.gmail.com')
 mail.login(login, password)
-mail.list()
-mail.select('inbox')
+
+
+def get_sender(email_message) :
+    sender = email.utils.parseaddr(email_message['From'])
+    name = sender[0]
+    addr = sender[1]
+    return name, addr
+    
+
 
 def get_first_text_block(email_message_instance):
         maintype = email_message_instance.get_content_maintype()
@@ -52,31 +66,37 @@ def get_first_text_block(email_message_instance):
             return email_message_instance.get_payload()
 
 while True:    
-    print 'Checking email...'    
-    result, data = mail.uid('search', None, "ALL") 
-    latest_email_uid = data[0].split()[-1]
-    result, data = mail.uid('fetch', latest_email_uid, '(RFC822)')
-    raw_email = data[0][1]   
-    email_message = email.message_from_string(raw_email)
-    text = get_first_text_block(email_message)
-    
-    if 'on' in text :
-        print 'On'
-        GPIO.output(11, True)
+    #print 'Checking email...'
+    mail.list()
+    mail.select('inbox')
+    result, data = mail.uid('search', None, "(UNSEEN)")    
+    if data[0] != '':        
+        latest_email_uid = data[0].split()[-1]
+        result, data = mail.uid('fetch', latest_email_uid, '(RFC822)')
+        raw_email = data[0][1]   
+        email_message = email.message_from_string(raw_email)
+        name, sender = get_sender(email_message)        
+        if sender in whiteList :
+            print 'Command received from ' + name + ' (' + sender + ')'
+            text = get_first_text_block(email_message)
+            
+            if 'on' in text :
+                print 'On'
+                GPIO.output(outPin, True)
 
-    if 'off' in text :
-        print 'Off'
-        GPIO.output(11, False)
+            if 'off' in text :
+                print 'Off'
+                GPIO.output(outPin, False)
 
-    if 'pulse' in text :
-        print 'Pulse'
-        GPIO.output(11, False)
-        time.sleep(1)
-        GPIO.output(11, True)
-        time.sleep(1)
-        GPIO.output(11, False)
+            if 'pulse' in text :
+                print 'Pulse'
+                GPIO.output(outPin, False)
+                time.sleep(1)
+                GPIO.output(outPin, True)
+                time.sleep(1)
+                GPIO.output(outPin, False)
 
-    time.sleep(30)
+    #time.sleep(30)
 
 
 
