@@ -46,6 +46,7 @@ password = sys.argv[2]
 
 mail = imaplib.IMAP4_SSL('imap.gmail.com')
 mail.login(login, password)
+print 'GPIO Email service started'
 
 
 def get_sender(email_message) :
@@ -66,7 +67,7 @@ def get_first_text_block(email_message_instance):
             return email_message_instance.get_payload()
 
 while True:    
-    #print 'Checking email...'
+    print 'Checking email...'
     mail.list()
     mail.select('inbox')
     result, data = mail.uid('search', None, "(UNSEEN)")    
@@ -77,7 +78,7 @@ while True:
         email_message = email.message_from_string(raw_email)
         name, sender = get_sender(email_message)
         subj = email.utils.parseaddr(email_message['Subject'])[1]        
-        if sender in whiteList and subj = 'gpio':
+        if sender in whiteList and subj.upper() == 'GPIO' :
             print 'Command received from ' + name + ' (' + sender + ')'
             text = get_first_text_block(email_message)
             
@@ -99,9 +100,9 @@ while True:
                 GPIO.output(outPin, True)
                 time.sleep(1)
                 GPIO.output(outPin, False)
-
+    print "Sleeping for " + str(sleepTime) + " seconds"
     time.sleep(sleepTime)
-
+    
 
 
 
