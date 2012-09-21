@@ -29,6 +29,8 @@ import imaplib
 import email
 import sys
 import ConfigParser
+import smtplib
+import os
 
 config = ConfigParser.SafeConfigParser()
 config.read('emailGPIO.cfg')
@@ -36,6 +38,8 @@ whiteList = {}
 whiteList = config.get('Email', 'WhiteList').split(' ')
 sleepTime = config.getint('Email', 'Interval')
 outPin = config.getint('Hardware', 'Output')
+
+state = 'off'
 
 GPIO.setmode(GPIO.BOARD)
 GPIO.setup(outPin, GPIO.OUT)
@@ -47,6 +51,21 @@ password = sys.argv[2]
 mail = imaplib.IMAP4_SSL('imap.gmail.com')
 mail.login(login, password)
 print 'GPIO Email service started'
+
+verbose = True
+
+def sendEmail(recipient, subject, message) :
+    global login
+    global password    
+    smtpserver = smtplib.SMTP("smtp.gmail.com",587)
+    smtpserver.ehlo()
+    smtpserver.starttls()
+    smtpserver.ehlo
+    smtpserver.login(login, password)
+    header = 'To:' + recipient + '\n' + 'From: ' + login + '\n' + 'Subject: ' + subject+ ' \n'
+    msg = header + '\n '+ message + '\n\n'
+    print 'Sending ACK to ' + login
+    smtpserver.sendmail(login, recipient, msg)
 
 
 def get_sender(email_message) :
@@ -65,7 +84,7 @@ def get_first_text_block(email_message_instance):
 
         elif maintype == 'text':
             return email_message_instance.get_payload()
-
+os.popen("echo 'Coming online now' | festival --tts")
 while True:    
     print 'Checking email...'
     mail.list()
@@ -81,17 +100,33 @@ while True:
         if sender in whiteList and subj.upper() == 'GPIO' :
             print 'Command received from ' + name + ' (' + sender + ')'
             text = get_first_text_block(email_message)
+            sendEmail(sender, 'ACK', text)
+            os.popen("echo 'recieved email from" + str(sender) + "'  | festival --tts")
+            time.sleep(1)
+            #os.popen("echo 'Message body is' | festival --tts")
+            #time.sleep(1)
+            #os.popen("echo '" + text + "' | festival --tts")
+            #time.sleep(1)
+            
             
             if 'on' in text :
+               # os.popen("echo 'Activating pin' | festival --tts")
                 print '     --> On'
+                state = 'on'
                 GPIO.output(outPin, True)
 
             if 'off' in text :
+               # os.popen("echo 'deactivating pin' | festival --tts")
                 print '      --> Off'
+                state = 'off'
                 GPIO.output(outPin, False)
 
             if 'status'  in text :
                 print '      --> Status'
+                text = 'Pin state is ' + str(state)
+                sendEmail(sender, 'Status report', text)
+                
+               # os.popen = ("echo 'Status request' | festival --tts")
 
             if 'pulse' in text :
                 print '      --> Pulse'
@@ -100,6 +135,7 @@ while True:
                 GPIO.output(outPin, True)
                 time.sleep(1)
                 GPIO.output(outPin, False)
+                state = 'off'
     print "Sleeping for " + str(sleepTime) + " seconds"
     time.sleep(sleepTime)
     
