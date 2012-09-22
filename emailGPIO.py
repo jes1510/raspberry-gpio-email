@@ -98,7 +98,7 @@ def get_first_text_block(email_message_instance):
             return email_message_instance.get_payload()
 
 while True:
-    if verbose : show('Checking email...', say=False)
+    show('Checking email...', say=False)
     try :
         mail.list()
         mail.select('inbox')
@@ -111,9 +111,8 @@ while True:
             name, sender = get_sender(email_message)
             subj = email.utils.parseaddr(email_message['Subject'])[1]        
             if sender in whiteList and subj.upper() == approvedSubject.upper() :      
-                show('Command received from ' + name + ' (' + sender + ')')
-                text = get_first_text_block(email_message)
-       
+                show('Command received from ' + name)
+                text = get_first_text_block(email_message)       
                     
                 if 'on' in text :               
                     show('Output is now on')
@@ -136,6 +135,8 @@ while True:
                     state = 'off'
 
                 if not 'noack' in text or 'status' in text:
+                    if 'status' in text :
+                        show("Status was requested. Pin state is " + state)
                     t = 'Pin state is ' + str(state)
                     sendEmail(sender, 'Status report', t)                    
 
