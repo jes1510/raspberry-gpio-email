@@ -17,7 +17,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/
 
 Toggles GPIO pin based on contents of an email received over IMAP.
 The sender must be listed in the 'WhiteList' in the 'Email' section
-of the configuration file.  
+of the configuration file.  If the 'speak' flag is set in the config
+file then festival will be used as an output to actually speak the
+output.
 
 Based heavily on example code here:
 http://yuji.wordpress.com/2011/06/22/python-imaplib-imap-example-with-gmail/
@@ -40,6 +42,9 @@ sleepTime = config.getint('Email', 'Interval')
 outPin = config.getint('Hardware', 'Output')
 speak = config.get('Configuration', 'Speak')
 verbose = config.get('Configuration', 'Verbose')
+approvedSubject = config.get('Email', 'Subject')
+
+sentenceQue = []
 
 state = 'off'
 
@@ -53,14 +58,14 @@ password = sys.argv[2]
 mail = imaplib.IMAP4_SSL('imap.gmail.com')
 mail.login(login, password)
 
-def show(output) :
-    print output
-    
-if verbose :
-    show('GPIO Email service started')
+def show(output, say=True) :
+    if verbose :
+        print output
+        
+    if speak and say:
+        a = os.system("echo " + output + " | festival --tts")  
 
-if speak :
-    os.popen("echo 'Coming online now' | festival --tts") 
+show('Email service started')
 
 def sendEmail(recipient, subject, message) :
     global login
@@ -72,8 +77,8 @@ def sendEmail(recipient, subject, message) :
     smtpserver.login(login, password)
     header = 'To:' + recipient + '\n' + 'From: ' + login + '\n' + 'Subject: ' + subject+ ' \n'
     msg = header + '\n '+ message + '\n\n'
-    if verbose : show('Sending ACK to ' + login)
-    sendmail(login, recipient, msg)
+    if verbose : show('Sending to ' + recipient)
+    smtpserver.sendmail(login, recipient, msg)
 
 def get_sender(email_message) :
     sender = email.utils.parseaddr(email_message['From'])    
@@ -93,7 +98,7 @@ def get_first_text_block(email_message_instance):
             return email_message_instance.get_payload()
 
 while True:
-    if verbose : show('Checking email...')
+    if verbose : show('Checking email...', say=False)
     try :
         mail.list()
         mail.select('inbox')
@@ -105,50 +110,40 @@ while True:
             email_message = email.message_from_string(raw_email)
             name, sender = get_sender(email_message)
             subj = email.utils.parseaddr(email_message['Subject'])[1]        
-            if sender in whiteList and subj.upper() == 'GPIO' :
-                print 'Command received from ' + name + ' (' + sender + ')'
+            if sender in whiteList and subj.upper() == approvedSubject.upper() :      
+                show('Command received from ' + name + ' (' + sender + ')')
                 text = get_first_text_block(email_message)
-                sendEmail(sender, 'ACK', text)
-                os.popen("echo 'recieved email from" + str(sender) + "'  | festival --tts")
-                time.sleep(1)
-                #os.popen("echo 'Message body is' | festival --tts")
-                #time.sleep(1)
-                #os.popen("echo '" + text + "' | festival --tts")
-                #time.sleep(1)
-                
-                if 'on' in text :
-                   # os.popen("echo 'Activating pin' | festival --tts")
-                    if verbose : show('     --> On')
+       
+                    
+                if 'on' in text :               
+                    show('Output is now on')
                     state = 'on'
                     GPIO.output(outPin, True)
 
-                if 'off' in text :
-                   # os.popen("echo 'deactivating pin' | festival --tts")
-                    if verbose : show('      --> Off')
+                if 'off' in text :                 
+                    show('Output is now off')
                     state = 'off'
-                    GPIO.output(outPin, False)
+                    GPIO.output(outPin, False)               
+                                       
 
-                if 'status'  in text :
-                    if verbose : show('      --> Status') 
-                    text = 'Pin state is ' + str(state)
-                    sendEmail(sender, 'Status report', text)
-                    
-                   # os.popen = ("echo 'Status request' | festival --tts")
-
-                if 'pulse' in text :
-                    if verbose : show('      --> Pulse')
+                if 'pulse' in text :             
+                    show('Pulsing output')
                     GPIO.output(outPin, False)
                     time.sleep(1)
                     GPIO.output(outPin, True)
                     time.sleep(1)
                     GPIO.output(outPin, False)
                     state = 'off'
+
+                if not 'noack' in text or 'status' in text:
+                    t = 'Pin state is ' + str(state)
+                    sendEmail(sender, 'Status report', t)                    
 
     except Exception, detail :
         print "ERROR: " + str(detail)
 
     if verbose :    
-        show("Sleeping for " + str(sleepTime) + " seconds")
+        show("Sleeping for " + str(sleepTime) + " seconds", say=False)
         
     time.sleep(sleepTime)
     
