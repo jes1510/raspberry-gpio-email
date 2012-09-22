@@ -38,6 +38,8 @@ whiteList = {}
 whiteList = config.get('Email', 'WhiteList').split(' ')
 sleepTime = config.getint('Email', 'Interval')
 outPin = config.getint('Hardware', 'Output')
+speak = config.get('Configuration', 'Speak')
+verbose = config.get('Configuration', 'Verbose')
 
 state = 'off'
 
@@ -50,9 +52,15 @@ password = sys.argv[2]
 
 mail = imaplib.IMAP4_SSL('imap.gmail.com')
 mail.login(login, password)
-print 'GPIO Email service started'
 
-verbose = True
+def show(output) :
+    print output
+    
+if verbose :
+    show('GPIO Email service started')
+
+if speak :
+    os.popen("echo 'Coming online now' | festival --tts") 
 
 def sendEmail(recipient, subject, message) :
     global login
@@ -64,9 +72,8 @@ def sendEmail(recipient, subject, message) :
     smtpserver.login(login, password)
     header = 'To:' + recipient + '\n' + 'From: ' + login + '\n' + 'Subject: ' + subject+ ' \n'
     msg = header + '\n '+ message + '\n\n'
-    print 'Sending ACK to ' + login
-    smtpserver.sendmail(login, recipient, msg)
-
+    if verbose : show('Sending ACK to ' + login)
+    sendmail(login, recipient, msg)
 
 def get_sender(email_message) :
     sender = email.utils.parseaddr(email_message['From'])    
@@ -84,59 +91,65 @@ def get_first_text_block(email_message_instance):
 
         elif maintype == 'text':
             return email_message_instance.get_payload()
-os.popen("echo 'Coming online now' | festival --tts")
-while True:    
-    print 'Checking email...'
-    mail.list()
-    mail.select('inbox')
-    result, data = mail.uid('search', None, "(UNSEEN)")    
-    if data[0] != '':        
-        latest_email_uid = data[0].split()[-1]
-        result, data = mail.uid('fetch', latest_email_uid, '(RFC822)')
-        raw_email = data[0][1]   
-        email_message = email.message_from_string(raw_email)
-        name, sender = get_sender(email_message)
-        subj = email.utils.parseaddr(email_message['Subject'])[1]        
-        if sender in whiteList and subj.upper() == 'GPIO' :
-            print 'Command received from ' + name + ' (' + sender + ')'
-            text = get_first_text_block(email_message)
-            sendEmail(sender, 'ACK', text)
-            os.popen("echo 'recieved email from" + str(sender) + "'  | festival --tts")
-            time.sleep(1)
-            #os.popen("echo 'Message body is' | festival --tts")
-            #time.sleep(1)
-            #os.popen("echo '" + text + "' | festival --tts")
-            #time.sleep(1)
-            
-            
-            if 'on' in text :
-               # os.popen("echo 'Activating pin' | festival --tts")
-                print '     --> On'
-                state = 'on'
-                GPIO.output(outPin, True)
 
-            if 'off' in text :
-               # os.popen("echo 'deactivating pin' | festival --tts")
-                print '      --> Off'
-                state = 'off'
-                GPIO.output(outPin, False)
-
-            if 'status'  in text :
-                print '      --> Status'
-                text = 'Pin state is ' + str(state)
-                sendEmail(sender, 'Status report', text)
+while True:
+    if verbose : show('Checking email...')
+    try :
+        mail.list()
+        mail.select('inbox')
+        result, data = mail.uid('search', None, "(UNSEEN)")    
+        if data[0] != '':        
+            latest_email_uid = data[0].split()[-1]
+            result, data = mail.uid('fetch', latest_email_uid, '(RFC822)')
+            raw_email = data[0][1]   
+            email_message = email.message_from_string(raw_email)
+            name, sender = get_sender(email_message)
+            subj = email.utils.parseaddr(email_message['Subject'])[1]        
+            if sender in whiteList and subj.upper() == 'GPIO' :
+                print 'Command received from ' + name + ' (' + sender + ')'
+                text = get_first_text_block(email_message)
+                sendEmail(sender, 'ACK', text)
+                os.popen("echo 'recieved email from" + str(sender) + "'  | festival --tts")
+                time.sleep(1)
+                #os.popen("echo 'Message body is' | festival --tts")
+                #time.sleep(1)
+                #os.popen("echo '" + text + "' | festival --tts")
+                #time.sleep(1)
                 
-               # os.popen = ("echo 'Status request' | festival --tts")
+                if 'on' in text :
+                   # os.popen("echo 'Activating pin' | festival --tts")
+                    if verbose : show('     --> On')
+                    state = 'on'
+                    GPIO.output(outPin, True)
 
-            if 'pulse' in text :
-                print '      --> Pulse'
-                GPIO.output(outPin, False)
-                time.sleep(1)
-                GPIO.output(outPin, True)
-                time.sleep(1)
-                GPIO.output(outPin, False)
-                state = 'off'
-    print "Sleeping for " + str(sleepTime) + " seconds"
+                if 'off' in text :
+                   # os.popen("echo 'deactivating pin' | festival --tts")
+                    if verbose : show('      --> Off')
+                    state = 'off'
+                    GPIO.output(outPin, False)
+
+                if 'status'  in text :
+                    if verbose : show('      --> Status') 
+                    text = 'Pin state is ' + str(state)
+                    sendEmail(sender, 'Status report', text)
+                    
+                   # os.popen = ("echo 'Status request' | festival --tts")
+
+                if 'pulse' in text :
+                    if verbose : show('      --> Pulse')
+                    GPIO.output(outPin, False)
+                    time.sleep(1)
+                    GPIO.output(outPin, True)
+                    time.sleep(1)
+                    GPIO.output(outPin, False)
+                    state = 'off'
+
+    except Exception, detail :
+        print "ERROR: " + str(detail)
+
+    if verbose :    
+        show("Sleeping for " + str(sleepTime) + " seconds")
+        
     time.sleep(sleepTime)
     
 
