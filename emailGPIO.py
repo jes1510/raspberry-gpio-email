@@ -197,7 +197,7 @@ if __name__ == '__main__' :
 
                     if not 'noack' in text or 'status' in text:
                         if 'status' in text :
-                            show_lcd("Staus request")
+                            show_lcd("Status request:")
                             show_lcd("Pin is " + str(state), line=2)
                             show("Status was requested. Pin state is " + state)
                         t = 'Pin state is ' + str(state)
