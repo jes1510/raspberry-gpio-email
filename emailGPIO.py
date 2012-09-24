@@ -23,6 +23,20 @@ output.
 
 Based heavily on example code here:
 http://yuji.wordpress.com/2011/06/22/python-imaplib-imap-example-with-gmail/
+
+#   ________Pinout______
+#   GPIO #      Function
+#   21          Enable (Active low)
+#   22          Switch Input
+#   10          Controller           
+#   9           Lights
+#   11          Backlight
+#   18          LCD 18
+#   23          LCD 13
+#   24          LCD 12
+#   25 `        LCD 11
+#   8           LCD 6
+#   7           LCD 4
 '''
 
 import RPi.GPIO as GPIO
@@ -33,24 +47,47 @@ import sys
 import ConfigParser
 import smtplib
 import os
+import lcd as lcd
 
-config = ConfigParser.SafeConfigParser()
-config.read('emailGPIO.cfg')
-whiteList = {}
-whiteList = config.get('Email', 'WhiteList').split(' ')
-sleepTime = config.getint('Email', 'Interval')
-outPin = config.getint('Hardware', 'Output')
-speak = config.get('Configuration', 'Speak')
-verbose = config.get('Configuration', 'Verbose')
-approvedSubject = config.get('Email', 'Subject')
 
+class Configuration() :
+    def __init__(self) :
+        self.configFile  = ConfigParser.SafeConfigParser()
+        self.configFile.read('emailGPIO.cfg')
+        self. whiteList = {}
+        self.whiteList = self.configFile.get('Email', 'WhiteList').split(' ')
+        self.sleepTime = self.configFile.getint('Email', 'Interval')
+
+        self.backlightPin = self.configFile.getint('Hardware', 'Backlight')
+        self.enablePin = self.configFile.getint('Hardware', 'Enable')
+        self.inputPin = self.configFile.getint('Hardware', 'Input')
+
+        self.speak = self.configFile.get('Configuration', 'Speak')
+        self.verbose = self.configFile.get('Configuration', 'Verbose')
+        self.approvedSubject = self.configFile.get('Email', 'Subject')
+
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setup(self.backlightPin, GPIO.OUT)
+        GPIO.setup(self.enablePin, GPIO.OUT)
+
+        GPIO.setmode(GPIO.BCM)       # Use BCM GPIO numbers
+        GPIO.setup(lcd.LCD_E, GPIO.OUT)  # E
+        GPIO.setup(lcd.LCD_RS, GPIO.OUT) # RS
+        GPIO.setup(lcd.LCD_D4, GPIO.OUT) # DB4
+        GPIO.setup(lcd.LCD_D5, GPIO.OUT) # DB5
+        GPIO.setup(lcd.LCD_D6, GPIO.OUT) # DB6
+        GPIO.setup(lcd.LCD_D7, GPIO.OUT) # DB7
+
+        GPIO.output(self.enablePin, False)
+        GPIO.output(self.backlightPin, False)
+
+        self.on = True
+        self.off = False
+        
 sentenceQue = []
 
 state = 'off'
-
-GPIO.setmode(GPIO.BOARD)
-GPIO.setup(outPin, GPIO.OUT)
-GPIO.output(outPin, False)
+config = Configuration()
 
 login = sys.argv[1]
 password = sys.argv[2]
@@ -58,13 +95,23 @@ password = sys.argv[2]
 mail = imaplib.IMAP4_SSL('imap.gmail.com')
 mail.login(login, password)
 
-def show(output, say=True) :
-    if verbose :
+def show(output, say=True, line=1) :    
+    if config.verbose :
         print output
         
-    if speak and say:
-        a = os.system("echo " + output + " | festival --tts")  
+    if config.speak and say:
+        a = os.system("echo " + output + " | festival --tts")
 
+
+def show_lcd(message, line=1) :
+    if line==1: line = lcd.LCD_LINE_1
+    if line==2: line = lcd.LCD_LINE_2
+    lcd.lcd_byte(line, lcd.LCD_CMD)
+    lcd.lcd_string(message)
+
+GPIO.output(config.backlightPin, True)
+show_lcd("Email service")
+show_lcd("starting...", line=2)
 show('Email service started')
 
 def sendEmail(recipient, subject, message) :
@@ -77,7 +124,7 @@ def sendEmail(recipient, subject, message) :
     smtpserver.login(login, password)
     header = 'To:' + recipient + '\n' + 'From: ' + login + '\n' + 'Subject: ' + subject+ ' \n'
     msg = header + '\n '+ message + '\n\n'
-    if verbose : show('Sending to ' + recipient)
+    if config.verbose : show('Sending to ' + recipient)
     smtpserver.sendmail(login, recipient, msg)
 
 def get_sender(email_message) :
@@ -97,56 +144,71 @@ def get_first_text_block(email_message_instance):
         elif maintype == 'text':
             return email_message_instance.get_payload()
 
-while True:
-    show('Checking email...', say=False)
-    try :
-        mail.list()
-        mail.select('inbox')
-        result, data = mail.uid('search', None, "(UNSEEN)")    
-        if data[0] != '':        
-            latest_email_uid = data[0].split()[-1]
-            result, data = mail.uid('fetch', latest_email_uid, '(RFC822)')
-            raw_email = data[0][1]   
-            email_message = email.message_from_string(raw_email)
-            name, sender = get_sender(email_message)
-            subj = email.utils.parseaddr(email_message['Subject'])[1]        
-            if sender in whiteList and subj.upper() == approvedSubject.upper() :      
-                show('Command received from ' + name)
-                text = get_first_text_block(email_message)       
-                    
-                if 'on' in text :               
-                    show('Output is now on')
-                    state = 'on'
-                    GPIO.output(outPin, True)
-
-                if 'off' in text :                 
-                    show('Output is now off')
-                    state = 'off'
-                    GPIO.output(outPin, False)               
-                                       
-
-                if 'pulse' in text :             
-                    show('Pulsing output')
-                    GPIO.output(outPin, False)
-                    time.sleep(1)
-                    GPIO.output(outPin, True)
-                    time.sleep(1)
-                    GPIO.output(outPin, False)
-                    state = 'off'
-
-                if not 'noack' in text or 'status' in text:
-                    if 'status' in text :
-                        show("Status was requested. Pin state is " + state)
-                    t = 'Pin state is ' + str(state)
-                    sendEmail(sender, 'Status report', t)                    
-
-    except Exception, detail :
-        print "ERROR: " + str(detail)
-
-    if verbose :    
-        show("Sleeping for " + str(sleepTime) + " seconds", say=False)
+if __name__ == '__main__' :
+    GPIO.output(config.backlightPin, False)
+    lcd.lcd_init()
+    time.sleep(1)
+    while True:
+        show_lcd('', line=1)
+        show_lcd('', line=2)
+        show('Checking email...', say=False)
+        show_lcd("Checking email", line=1)
+        #show_lcd(" ", line=2)
         
-    time.sleep(sleepTime)
+        try :
+            mail.list()
+            mail.select('inbox')
+            result, data = mail.uid('search', None, "(UNSEEN)")    
+            if data[0] != '':        
+                latest_email_uid = data[0].split()[-1]
+                result, data = mail.uid('fetch', latest_email_uid, '(RFC822)')
+                raw_email = data[0][1]   
+                email_message = email.message_from_string(raw_email)
+                name, sender = get_sender(email_message)
+                subj = email.utils.parseaddr(email_message['Subject'])[1]        
+                if sender in config.whiteList and subj.upper() == config.approvedSubject.upper() :
+                    GPIO.output(config.backlightPin, True)
+                    show_lcd("Command from:")
+                    show_lcd(name, line=2)                    
+                    show('Command received from ' + name)
+                    text = get_first_text_block(email_message)       
+                        
+                    if 'on' in text :
+                        show_lcd("ON command")
+                        show('Output is now on')
+                        state = 'on'                        
+
+                    if 'off' in text :
+                        show_lcd("OFF command")
+                        show('Output is now off')
+                        state = 'off'                            
+                                           
+
+                    if 'pulse' in text :                 
+                        show('Pulsing output')
+                        GPIO.output(backlightPinoutPin, False)
+                        time.sleep(1)
+                        GPIO.output(backlightPinoutPin, True)
+                        time.sleep(1)
+                        GPIO.output(backlightPinoutPin, False)
+                        state = 'off'
+
+                    if not 'noack' in text or 'status' in text:
+                        if 'status' in text :
+                            show("Status was requested. Pin state is " + state)
+                        t = 'Pin state is ' + str(state)
+                        sendEmail(sender, 'Status report', t)
+
+        
+
+        except Exception, detail :
+            print "ERROR: " + str(detail)
+        GPIO.output(config.backlightPin, False)
+        if config.verbose :    
+            show("Sleeping for " + str(config.sleepTime) + " seconds", say=False)
+        show_lcd("Sleeping for ",line=1 )
+        show_lcd(str(config.sleepTime) + " seconds", line=2)
+        time.sleep(config.sleepTime)
     
 
 
