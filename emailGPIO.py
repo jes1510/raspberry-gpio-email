@@ -175,11 +175,13 @@ if __name__ == '__main__' :
                         
                     if 'on' in text :
                         show_lcd("ON command")
+                        show_lcd('', line=2)
                         show('Output is now on')
                         state = 'on'                        
 
                     if 'off' in text :
                         show_lcd("OFF command")
+                        show_lcd('', line=2)
                         show('Output is now off')
                         state = 'off'                            
                                            
@@ -195,6 +197,8 @@ if __name__ == '__main__' :
 
                     if not 'noack' in text or 'status' in text:
                         if 'status' in text :
+                            show_lcd("Staus request")
+                            show_lcd("Pin is " + str(state), line=2)
                             show("Status was requested. Pin state is " + state)
                         t = 'Pin state is ' + str(state)
                         sendEmail(sender, 'Status report', t)
