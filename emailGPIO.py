@@ -211,8 +211,13 @@ if __name__ == '__main__' :
         if config.verbose :    
             show("Sleeping for " + str(config.sleepTime) + " seconds", say=False)
         show_lcd("Sleeping for ",line=1 )
-        show_lcd(str(config.sleepTime) + " seconds", line=2)
-        time.sleep(config.sleepTime)
+        timer = config.sleepTime
+        
+        while timer > 0 :            
+            show_lcd(str(timer) + " seconds", line=2)
+            timer -= 1
+            time.sleep(1)
+        
     
 
 
