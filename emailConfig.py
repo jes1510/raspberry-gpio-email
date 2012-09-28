@@ -4,6 +4,21 @@ import lcd
 
 class Configuration() :
     def __init__(self) :
+        '''
+        #   ________Pinout______
+        #   GPIO #      Function
+        #   21          Enable (Active low)
+        #   22          Switch Input
+        #   10          Output           
+        #   9           Lights
+        #   11          Backlight
+        #   18          LCD 18
+        #   23          LCD 13
+        #   24          LCD 12
+        #   25 `        LCD 11
+        #   8           LCD 6
+        #   7           LCD 4
+        '''
         self.configFile  = ConfigParser.SafeConfigParser()
         self.configFile.read('emailGPIO.cfg')
         self. whiteList = {}
