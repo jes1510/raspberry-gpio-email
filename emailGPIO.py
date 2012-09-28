@@ -19,7 +19,8 @@ Toggles GPIO pin based on contents of an email received over IMAP.
 The sender must be listed in the 'WhiteList' in the 'Email' section
 of the configuration file.  If the 'speak' flag is set in the config
 file then festival will be used as an output to actually speak the
-output.
+output.  All pins and general configuration happens in the emailConfig
+module.
 
 Based heavily on example code here:
 http://yuji.wordpress.com/2011/06/22/python-imaplib-imap-example-with-gmail/
@@ -28,7 +29,7 @@ http://yuji.wordpress.com/2011/06/22/python-imaplib-imap-example-with-gmail/
 #   GPIO #      Function
 #   21          Enable (Active low)
 #   22          Switch Input
-#   10          Controller           
+#   10          Output           
 #   9           Lights
 #   11          Backlight
 #   18          LCD 18
@@ -44,50 +45,13 @@ import time
 import imaplib
 import email
 import sys
-import ConfigParser
 import smtplib
 import os
-import lcd as lcd
-
-
-class Configuration() :
-    def __init__(self) :
-        self.configFile  = ConfigParser.SafeConfigParser()
-        self.configFile.read('emailGPIO.cfg')
-        self. whiteList = {}
-        self.whiteList = self.configFile.get('Email', 'WhiteList').split(' ')
-        self.sleepTime = self.configFile.getint('Email', 'Interval')
-
-        self.backlightPin = self.configFile.getint('Hardware', 'Backlight')
-        self.enablePin = self.configFile.getint('Hardware', 'Enable')
-        self.inputPin = self.configFile.getint('Hardware', 'Input')
-
-        self.speak = self.configFile.get('Configuration', 'Speak')
-        self.verbose = self.configFile.get('Configuration', 'Verbose')
-        self.approvedSubject = self.configFile.get('Email', 'Subject')
-
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setup(self.backlightPin, GPIO.OUT)
-        GPIO.setup(self.enablePin, GPIO.OUT)
-
-        GPIO.setmode(GPIO.BCM)       # Use BCM GPIO numbers
-        GPIO.setup(lcd.LCD_E, GPIO.OUT)  # E
-        GPIO.setup(lcd.LCD_RS, GPIO.OUT) # RS
-        GPIO.setup(lcd.LCD_D4, GPIO.OUT) # DB4
-        GPIO.setup(lcd.LCD_D5, GPIO.OUT) # DB5
-        GPIO.setup(lcd.LCD_D6, GPIO.OUT) # DB6
-        GPIO.setup(lcd.LCD_D7, GPIO.OUT) # DB7
-
-        GPIO.output(self.enablePin, False)
-        GPIO.output(self.backlightPin, False)
-
-        self.on = True
-        self.off = False
-        
-sentenceQue = []
+import emailConfig 
+import lcd 
 
 state = 'off'
-config = Configuration()
+config = emailConfig.Configuration()
 
 login = sys.argv[1]
 password = sys.argv[2]
@@ -177,14 +141,17 @@ if __name__ == '__main__' :
                         show_lcd("ON command")
                         show_lcd('', line=2)
                         show('Output is now on')
-                        state = 'on'                        
+                        GPIO.output(config.lightsPin, True)
+                        state = 'on'
+                        time.sleep(config.displayTime)
 
                     if 'off' in text :
                         show_lcd("OFF command")
                         show_lcd('', line=2)
                         show('Output is now off')
+                        GPIO.output(config.lightsPin, False)
                         state = 'off'                            
-                                           
+                        time.sleep(config.displayTime)             
 
                     if 'pulse' in text :                 
                         show('Pulsing output')
@@ -200,9 +167,11 @@ if __name__ == '__main__' :
                             show_lcd("Status request:")
                             show_lcd("Pin is " + str(state), line=2)
                             show("Status was requested. Pin state is " + state)
-                        t = 'Pin state is ' + str(state)
+                        
+                        t = 'Pin state is ' + str(GPIO.input(config.inputPin)) + '\nOutput is ' + str(state)
+                        
                         sendEmail(sender, 'Status report', t)
-
+                        time.sleep(config.displayTime)
         
 
         except Exception, detail :
