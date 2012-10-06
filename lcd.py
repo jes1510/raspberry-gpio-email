@@ -6,7 +6,7 @@
 # Author : Matt Hawkins
 # Site   : http://www.raspberrypi-spy.co.uk
 # 
-# Date   : 26/07/2012
+# Date   : 03/08/2012
 #
 
 # The wiring for the LCD is as follows:
@@ -38,6 +38,7 @@ LCD_D4 = 25
 LCD_D5 = 24
 LCD_D6 = 23
 LCD_D7 = 18
+LED_ON = 15
 
 # Define some device constants
 LCD_WIDTH = 16    # Maximum characters per line
@@ -61,25 +62,45 @@ def main():
   GPIO.setup(LCD_D5, GPIO.OUT) # DB5
   GPIO.setup(LCD_D6, GPIO.OUT) # DB6
   GPIO.setup(LCD_D7, GPIO.OUT) # DB7
+  GPIO.setup(LED_ON, GPIO.OUT) # Backlight enable
 
   # Initialise display
   lcd_init()
 
-  # Send some test
+  # Toggle backlight on-off-on
+  GPIO.output(LED_ON, True)
+  time.sleep(1)
+  GPIO.output(LED_ON, False)
+  time.sleep(1)
+  GPIO.output(LED_ON, True)
+  time.sleep(1)
+
+  # Send some centred test
   lcd_byte(LCD_LINE_1, LCD_CMD)
-  lcd_string("Rasbperry Pi")
+  lcd_string("Rasbperry Pi",2)
   lcd_byte(LCD_LINE_2, LCD_CMD)
-  lcd_string("Model B")
+  lcd_string("Model B",2)
 
   time.sleep(3) # 3 second delay
 
-  # Send some text
+  # Send some left justified text
   lcd_byte(LCD_LINE_1, LCD_CMD)
-  lcd_string("Raspberrypi-spy")
+  lcd_string("1234567890123456",1)
   lcd_byte(LCD_LINE_2, LCD_CMD)
-  lcd_string(".co.uk")
+  lcd_string("abcdefghijklmnop",1)
 
-  time.sleep(20)
+  time.sleep(3) # 3 second delay
+
+  # Send some right justified text
+  lcd_byte(LCD_LINE_1, LCD_CMD)
+  lcd_string("Raspberrypi-spy",3)
+  lcd_byte(LCD_LINE_2, LCD_CMD)
+  lcd_string(".co.uk",3)
+
+  time.sleep(30)
+
+  # Turn off backlight
+  GPIO.output(LED_ON, False)
 
 def lcd_init():
   # Initialise display
@@ -88,15 +109,34 @@ def lcd_init():
   lcd_byte(0x28,LCD_CMD)
   lcd_byte(0x0C,LCD_CMD)  
   lcd_byte(0x06,LCD_CMD)
-  lcd_byte(0x01,LCD_CMD)  
+  lcd_byte(0x01,LCD_CMD)
 
-def lcd_string(message):
+def home() :
+  lcd_byte(0x02, LCD_CMD)
+  time.sleep(0.001)
+
+def clear() :
+  lcd_byte(0x01, LCD_CMD)
+  
+
+def lcd_string(message,style=1):
   # Send string to display
+  # style=1 Left justified
+  # style=2 Centred
+  # style=3 Right justified
 
-  message = message.ljust(LCD_WIDTH," ")  
+  if style==1:
+    message = message.ljust(LCD_WIDTH," ")  
+  elif style==2:
+    message = message.center(LCD_WIDTH," ")
+  elif style==3:
+    message = message.rjust(LCD_WIDTH," ")  
 
   for i in range(LCD_WIDTH):
-    lcd_byte(ord(message[i]),LCD_CHR)
+    if i == '\n' :
+      lcd_byte(LCD_LINE_2, LCD_CMD)
+    else :
+      lcd_byte(ord(message[i]),LCD_CHR)
 
 def lcd_byte(bits, mode):
   # Send byte to data pins
