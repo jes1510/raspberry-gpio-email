@@ -26,7 +26,7 @@ Based heavily on example code here:
 http://yuji.wordpress.com/2011/06/22/python-imaplib-imap-example-with-gmail/
 
 '''
-
+import urllib
 import RPi.GPIO as GPIO
 import time
 import imaplib
@@ -43,8 +43,7 @@ config = controlConfig.Configuration()
 login = sys.argv[1]
 password = sys.argv[2]
 
-mail = imaplib.IMAP4_SSL('imap.gmail.com')
-mail.login(login, password)
+
 
 
 GPIO.setmode(GPIO.BCM)
@@ -82,6 +81,8 @@ lcd.LED_ON = config.backlightPin
 lcd.lcd_init()
 lcd.message = lcd.lcd_string        # Keeps some compatibility with the Adafruit module
 
+
+
 def show(output, say=True, line=1) :    
     if config.verbose :
         print output
@@ -98,27 +99,51 @@ def show_lcd(message, line=1) :
         lcd.setCursor(1,2)
         lcd.message(message)
         
-def sendEmail(recipient, subject, message) :
-    global login
-    global password    
-    smtpserver = smtplib.SMTP("smtp.gmail.com",587)
-    smtpserver.ehlo()
-    smtpserver.starttls()
-    smtpserver.ehlo
-    smtpserver.login(login, password)
-    header = 'To:' + recipient + '\n' + 'From: ' + login + '\n' + 'Subject: ' + subject+ ' \n'
-    msg = header + '\n '+ message + '\n\n'
-    if config.verbose : show('Sending to ' + recipient)
-    smtpserver.sendmail(login, recipient, msg)
+class Mailmanager() :
+    def __init__(self, login, password) :
+        self.login = login
+        self.password = password
 
-def get_sender(email_message) :
-    sender = email.utils.parseaddr(email_message['From'])    
-    name = sender[0]
-    addr = sender[1]
-    return name, addr   
+        self.mail = imaplib.IMAP4_SSL('imap.gmail.com')
+        self.mail.login(login, password)
 
+    def getMail(self) :
+        self.mail.list()
+        self.mail.select('inbox')
+        result, data = mail.uid('search', None, "(UNSEEN)")    
+        if data[0] != '':
+            #print data
+            time.sleep(.1)
+            latest_email_uid = data[0].split()[-1]
+            result, data = self.mail.uid('fetch', latest_email_uid, '(RFC822)')
+            raw_email = data[0][1]   
+            message = email.message_from_string(raw_email)
+            name, sender = self.get_sender(message)
+            subj = email.utils.parseaddr(message['Subject'])[1]
+            text = self.getBody(message) 
+            return name, sender, subj, text
+        
+        else :
+            return 0, 0, 0, 0
+        
+        
+    def sendEmail(self, recipient, subject, message) :           
+        smtpserver = smtplib.SMTP("smtp.gmail.com",587)
+        smtpserver.ehlo()
+        smtpserver.starttls()
+        smtpserver.ehlo
+        smtpserver.login(login, password)
+        header = 'To:' + recipient + '\n' + 'From: ' + login + '\n' + 'Subject: ' + subject+ ' \n'
+        msg = header + '\n '+ message + '\n\n'        
+        smtpserver.sendmail(login, recipient, msg)
 
-def get_first_text_block(email_message_instance):
+    def get_sender(self,email_message) :
+        sender = email.utils.parseaddr(email_message['From'])    
+        name = sender[0]
+        addr = sender[1]
+        return name, addr
+
+    def getBody(self, email_message_instance):
         maintype = email_message_instance.get_content_maintype()
         if maintype == 'multipart':
             for part in email_message_instance.get_payload():
@@ -127,6 +152,61 @@ def get_first_text_block(email_message_instance):
 
         elif maintype == 'text':
             return email_message_instance.get_payload()
+
+        
+
+class Commands() :
+    def __init__(self) :
+        pass
+    
+    def _getIP():
+        whatismyip = 'http://automation.whatismyip.com/n09230945.asp'
+        return urllib.urlopen(whatismyip).readlines()[0]
+
+    def ip(self) :
+        lcd.home()
+        lcd.message("IP Request")
+        ip = self._getIP()
+        sendEmail(sender, 'IP Info', ip)
+        
+    def on(self) :
+         #lcd.clear()
+        lcd.home()
+        time.sleep(.1)
+        lcd.message("ON command")                        
+        show('Output is now on')
+        GPIO.output(config.lightsPin, True)
+        state = 'on'
+        time.sleep(config.displayTime)
+
+    def off(self) :
+        #lcd.clear()
+        lcd.home()
+        time.sleep(.1)
+        lcd.message("OFF command")               
+        show('Output is now off')
+        GPIO.output(config.lightsPin, False)
+        state = 'off'                            
+        time.sleep(config.displayTime)
+
+    def status(self) :
+        lcd.clear()
+        lcd.home()
+        time.sleep(.1)
+        lcd.message("Status request:\n")
+        lcd.message("Pin is " + str(state))
+        show("Status was requested. Pin state is " + state)
+
+    def readInput(self) :
+        pinState = GPIO.input(config.inputPin)
+        return pinState
+        
+
+
+commands = Commands()
+mailmanager = Mailmanager(login, password)
+mail = mailmanager.mail
+
 
 if __name__ == '__main__' :
     GPIO.output(config.backlightPin, False)
@@ -144,68 +224,38 @@ if __name__ == '__main__' :
         show('Checking email...', say=False)
         lcd.message("Checking email")
         time.sleep(3)
-        try :
-            mail.list()
-            mail.select('inbox')
-            result, data = mail.uid('search', None, "(UNSEEN)")    
-            if data[0] != '':        
-                latest_email_uid = data[0].split()[-1]
-                result, data = mail.uid('fetch', latest_email_uid, '(RFC822)')
-                raw_email = data[0][1]   
-                email_message = email.message_from_string(raw_email)
-                name, sender = get_sender(email_message)
-                subj = email.utils.parseaddr(email_message['Subject'])[1]        
-                if sender in config.whiteList and subj.upper() == config.approvedSubject.upper() :
-                    GPIO.output(config.backlightPin, True)
-                    lcd.message("Command from:")
-                    lcd.lcd_byte(lcd.LCD_LINE_2, lcd.LCD_CMD)
-                    lcd.message('\n' + name)                    
-                    show('Command received from ' + name)
-                    text = get_first_text_block(email_message)       
-                        
-                    if 'on' in text :
-                        #lcd.clear()
-                        lcd.home()
-                        time.sleep(.1)
-                        lcd.message("ON command")                        
-                        show('Output is now on')
-                        GPIO.output(config.lightsPin, True)
-                        state = 'on'
-                        time.sleep(config.displayTime)
+        try :           
+            name, sender, subj, text = mailmanager.getMail()            
+            #print name, sender, subj
+            if sender in config.whiteList and subj.upper() == config.approvedSubject.upper() :
+                GPIO.output(config.backlightPin, True)
+                lcd.message("Command from:")
+                lcd.lcd_byte(lcd.LCD_LINE_2, lcd.LCD_CMD)
+                lcd.message('\n' + name)                    
+                show('Command received from ' + name)                      
+                
+                if 'ip' in text :
+                    commands.ip()
+                    
+                                                    
+                if 'on' in text :
+                    commands.on()
+                   
 
-                    if 'off' in text :
-                        #lcd.clear()
-                        lcd.home()
-                        time.sleep(.1)
-                        lcd.message("OFF command")               
-                        show('Output is now off')
-                        GPIO.output(config.lightsPin, False)
-                        state = 'off'                            
-                        time.sleep(config.displayTime)             
+                if 'off' in text :
+                    commands.off()           
 
-                    if 'pulse' in text :                 
-                        show('Pulsing output')
-                        GPIO.output(backlightPinoutPin, False)
-                        time.sleep(1)
-                        GPIO.output(backlightPinoutPin, True)
-                        time.sleep(1)
-                        GPIO.output(backlightPinoutPin, False)
-                        state = 'off'
 
-                    if not 'noack' in text or 'status' in text:
-                        if 'status' in text :
-                            lcd.clear()
-                            lcd.home()
-                            time.sleep(.1)
-                            lcd.message("Status request:\n")
-                            lcd.message("Pin is " + str(state))
-                            show("Status was requested. Pin state is " + state)
+                if not 'noack' in text or 'status' in text:
+                    if 'status' in text :
+                        commands.status()
                         
-                        t = 'Pin state is ' + str(GPIO.input(config.inputPin)) + '\nOutput is ' + str(state)
-                        
-                        sendEmail(sender, 'Status report', t)
-                        time.sleep(config.displayTime)
-        
+                    t = 'Pin state is ' + str(commands.readInput()) + '\nOutput is ' + str(state)
+
+                    if config.verbose : show('Sending reply to ' + sender)
+                    mailmanager.sendEmail(sender, 'Status report', t)
+                    time.sleep(config.displayTime)
+                    
 
         except Exception, detail :
             print "ERROR: " + str(detail)
