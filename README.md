@@ -17,7 +17,7 @@ This program establishes a connection to the gMail IMAP server and then
 tt downloads the latest message and toggles the GPIO pin accordingly.
 
 Acceptable commands
---------------------------------
+
 'on':  Toggle GPIO pin HIGH
 'off':  Toggle GPIO pin LOW
 'status': read status of input pin 
