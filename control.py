@@ -175,8 +175,7 @@ class Commands() :
         time.sleep(.1)
         lcd.message("ON command")                        
         show('Output is now on')
-        GPIO.output(config.lightsPin, True)
-        state = 'on'
+        GPIO.output(config.lightsPin, True)        
         time.sleep(config.displayTime)
 
     def off(self) :
@@ -185,8 +184,7 @@ class Commands() :
         time.sleep(.1)
         lcd.message("OFF command")               
         show('Output is now off')
-        GPIO.output(config.lightsPin, False)
-        state = 'off'                            
+        GPIO.output(config.lightsPin, False)                                  
         time.sleep(config.displayTime)
 
     def status(self) :
@@ -200,7 +198,6 @@ class Commands() :
     def readInput(self) :
         pinState = GPIO.input(config.inputPin)
         return pinState
-        
 
 
 commands = Commands()
@@ -209,10 +206,10 @@ mail = mailmanager.mail
 
 
 if __name__ == '__main__' :
+    state = 'off'
     GPIO.output(config.backlightPin, False)
     lcd.home()
     lcd.message("Email service\n")
-
     lcd.message('Email service started')
     time.sleep(1)
     while True:
@@ -224,33 +221,44 @@ if __name__ == '__main__' :
         show('Checking email...', say=False)
         lcd.message("Checking email")
         time.sleep(3)
+        number = 0
+        
         try :           
             name, sender, subj, text = mailmanager.getMail()            
-            #print name, sender, subj
-            if sender in config.whiteList and subj.upper() == config.approvedSubject.upper() :
+            
+            try :
+                numList = sender.split('.')
+                number = numList[1]
+                assert int(number)                
+
+            except :
+                pass
+                
+            if sender in config.whiteList or number in config.whiteList:                
                 GPIO.output(config.backlightPin, True)
                 lcd.message("Command from:")
                 lcd.lcd_byte(lcd.LCD_LINE_2, lcd.LCD_CMD)
                 lcd.message('\n' + name)                    
                 show('Command received from ' + name)                      
                 
-                if 'ip' in text :
+                if 'ip' in text.lower() :
                     commands.ip()
                     
                                                     
-                if 'on' in text :
+                if 'on' in text.lower() :
                     commands.on()
+                    state = 'on'
                    
 
-                if 'off' in text :
+                if 'off' in text.lower() :
                     commands.off()           
+                    state = 'off'                      
 
-
-                if not 'noack' in text or 'status' in text:
+                if not 'noack' in text or 'status' in text.lower():
                     if 'status' in text :
                         commands.status()
                         
-                    t = 'Pin state is ' + str(commands.readInput()) + '\nOutput is ' + str(state)
+                    t = 'Input is ' + str(commands.readInput()) + '\nOutput is ' + str(state)
 
                     if config.verbose : show('Sending reply to ' + sender)
                     mailmanager.sendEmail(sender, 'Status report', t)
