@@ -16,7 +16,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/
 This program establishes a connection to the gMail IMAP server and then  
 tt downloads the latest message and toggles the GPIO pin accordingly.
 
-Acceptable commands:
+Acceptable commands
+--------------------------------
 'on':  Toggle GPIO pin HIGH
 'off':  Toggle GPIO pin LOW
 'status': read status of input pin 
