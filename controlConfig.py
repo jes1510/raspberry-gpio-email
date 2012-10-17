@@ -45,5 +45,6 @@ class Configuration() :
         self.verbose = self.configFile.get('Configuration', 'Verbose')
         self.displayTime = self.configFile.getint('Configuration', 'DisplayTime')
         self.warningTime = self.configFile.getint('Configuration', 'WarningTime')
+        self.logFile = self.configFile.get('Configuration', 'Logfile')
 
 

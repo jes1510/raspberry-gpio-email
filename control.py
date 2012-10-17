@@ -77,6 +77,7 @@ lcd.LED_ON = config.backlightPin
 
 lcd.lcd_init()
 lcd.message = lcd.lcd_string        # Keeps some compatibility with the Adafruit module
+of = open(config.logFile, 'a')
 
 def timer(seconds) :        
     while seconds > 0 :
@@ -229,104 +230,113 @@ mail = mailmanager.mail
 
 
 if __name__ == '__main__' :
-    state = 'off'
-    GPIO.output(config.backlightPin, False)
-    lcd.home()
-    lcd.message('Message service', style=2)
-    lcd.lcd_byte(lcd.LCD_LINE_2, lcd.LCD_CMD)
-    lcd.message('started', style=2)
-    print "Service started"
-    time.sleep(3)
-    while True:
-        time.sleep(.1)
+    try :
+        state = 'off'
+        GPIO.output(config.backlightPin, False)
         lcd.home()
-        time.sleep(.1)
-        lcd.clear()
-        time.sleep(.1)        
-        if config.verbose: show('Checking messages...', say=False)
-        lcd.lcd_byte(lcd.LCD_LINE_1, lcd.LCD_CMD)
-        lcd.message("Checking", style=2)
+        lcd.message('Message service', style=2)
         lcd.lcd_byte(lcd.LCD_LINE_2, lcd.LCD_CMD)
-        lcd.message("messages", style=2)
+        lcd.message('started', style=2)
+        print "Service started"
         time.sleep(3)
-        number = 0
-        
-        try :           
-            name, sender, subj, text = mailmanager.getMail()            
+        while True:
+            time.sleep(.1)
+            lcd.home()
+            time.sleep(.1)
+            lcd.clear()
+            time.sleep(.1)        
+            if config.verbose: show('Checking messages...', say=False)
+            lcd.lcd_byte(lcd.LCD_LINE_1, lcd.LCD_CMD)
+            lcd.message("Checking", style=2)
+            lcd.lcd_byte(lcd.LCD_LINE_2, lcd.LCD_CMD)
+            lcd.message("messages", style=2)
+            time.sleep(3)
+            number = 0
             
             try :
-                numList = sender.split('.')
-                number = numList[1]
-                assert int(number)                
-
-            except :
-                pass
                 
-            if sender in config.whiteList or number in config.whiteList:                
-                GPIO.output(config.backlightPin, True)
-                lcd.lcd_byte(lcd.LCD_LINE_1, lcd.LCD_CMD)
-                lcd.message("Command from:")
-                lcd.lcd_byte(lcd.LCD_LINE_2, lcd.LCD_CMD)
-                lcd.message('\n' + name)                    
-                show('Command received from ' + name)                      
+                name, sender, subj, text = mailmanager.getMail()            
                 
-                if 'ip' in text.lower() :
-                    commands.ip()                
-                                                    
-                if 'on' in text.lower() :                
-                    commands.on()
-                    state = 'on'               
+                try :
+                    numList = sender.split('.')
+                    number = numList[1]
+                    assert int(number)                
 
-                if 'off' in text.lower() :
-                    commands.off()           
-                    state = 'off'
-
-                if 'open' in text.lower() : 
-                    state = 'open'
-                    commands.warn(state)
-                    commands.openDoor()
-
-                if 'close' in text.lower() :
-                    state = 'closed'
-                    commands.warn(state)
-                    commands.closeDoor()
+                except :
+                    pass
                     
-
-                if not 'noack' in text or 'status' in text.lower(): 
-                    if 'status' in text :
-                        commands.status()
+                if sender in config.whiteList or number in config.whiteList:                
+                    GPIO.output(config.backlightPin, True)
+                    lcd.lcd_byte(lcd.LCD_LINE_1, lcd.LCD_CMD)
+                    lcd.message("Command from:")
+                    lcd.lcd_byte(lcd.LCD_LINE_2, lcd.LCD_CMD)
+                    lcd.message('\n' + name)                    
+                    show('Command received from ' + name)                      
                     
-                    t = 'Input is ' + str(commands.readInput()) + '\r\nOutput is ' + str(state)  
+                    if 'ip' in text.lower() :
+                        commands.ip()                
+                                                        
+                    if 'on' in text.lower() :                
+                        commands.on()
+                        state = 'on'               
 
-                    if config.verbose : show('Sending reply to ' + sender)
-                    mailmanager.sendEmail(sender, 'Status report', t)
-                    time.sleep(config.displayTime)
+                    if 'off' in text.lower() :
+                        commands.off()           
+                        state = 'off'
+
+                    if 'open' in text.lower() : 
+                        state = 'open'
+                        commands.warn(state)
+                        commands.openDoor()
+
+                    if 'close' in text.lower() :
+                        state = 'closed'
+                        commands.warn(state)
+                        commands.closeDoor()
+                        
+
+                    if not 'noack' in text or 'status' in text.lower(): 
+                        if 'status' in text :
+                            commands.status()
+                        
+                        t = 'Input is ' + str(commands.readInput()) + '\r\nOutput is ' + str(state)  
+
+                        if config.verbose : show('Sending reply to ' + sender)
+                        mailmanager.sendEmail(sender, 'Status report', t)
+                        time.sleep(config.displayTime)
+                    
+           # except smtplib.socket.socketerror :
                 
-        except smtplib.socket.socketerror :
-            lcd.clear()
-            lcd.message("Restarting server!", style=2)
-            mailmanager.stop()
-            timer(config.sleepTime)
-            lcd.clear()
-            lcd.message("Retrying...", style=2)
-            mailmanager.__init__(login, password)
-            time.sleep(3)
-            
+                
 
-        except Exception, detail :
-            print "ERROR: " + str(detail)
-            
-        GPIO.output(config.backlightPin, False)
-        if config.verbose :    
-            show("Sleeping for " + str(config.sleepTime) + " seconds", say=False)
-        lcd.home()
-        lcd.clear()
-        time.sleep(.1)
-        lcd.message("Sleeping for", style=2)
-        timer(config.sleepTime )
-
+            except Exception, detail :
+                print "ERROR: " + str(detail)
+                of.write(str(time.time()) + "\tError: " + str(detail) + '\n')                
+                lcd.clear()
+                lcd.message("Restarting server!", style=2)
+                try :
+                    mailmanager.stop()
+                except :
+                    pass
+                timer(config.sleepTime)
+                lcd.clear()
+                lcd.message("Retrying...", style=2)
+                mailmanager.__init__(login, password)
+                time.sleep(3)
+                
+            GPIO.output(config.backlightPin, False)
+            if config.verbose :    
+                show("Sleeping for " + str(config.sleepTime) + " seconds", say=False)
+            lcd.home()
+            lcd.clear()
+            time.sleep(.1)
+            lcd.message("Sleeping for", style=2)
+            timer(config.sleepTime )
+    
         
-        
+    except KeyboardInterrupt() :
+        of.close()
+                         
     
 
 
