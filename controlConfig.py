@@ -44,5 +44,6 @@ class Configuration() :
         else : self.speak = False
         self.verbose = self.configFile.get('Configuration', 'Verbose')
         self.displayTime = self.configFile.getint('Configuration', 'DisplayTime')
+        self.warningTime = self.configFile.getint('Configuration', 'WarningTime')
 
 
