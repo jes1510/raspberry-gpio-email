@@ -34,8 +34,12 @@ import email
 import sys
 import smtplib
 import os
-import controlConfig 
+import controlConfig
+from datetime import datetime
 import lcd as lcd
+
+if sys.platform == 'linux2' :
+    import syslog
 
 state = 'off'
 config = controlConfig.Configuration()
@@ -77,21 +81,45 @@ lcd.LED_ON = config.backlightPin
 
 lcd.lcd_init()
 lcd.message = lcd.lcd_string        # Keeps some compatibility with the Adafruit module
-of = open(config.logFile, 'a')
 
-def timer(seconds) :        
-    while seconds > 0 :
-        lcd.lcd_byte(lcd.LCD_LINE_2, lcd.LCD_CMD)
-        lcd.message(str(seconds) + " seconds", style=2)
-        seconds -= 1
-        time.sleep(1)
-    return 0
+if config.verbose == 'True' :  config.verbose = True
+else : config.verbose = False
 
-def show(output, say=True, line=1) :    
-    if config.verbose :
-        print output
+if config.speak == 'True' : config.speak = True
+else : config.speak = False
+
+
+def log(message) :    
+    if config.logFile != 'system' :
+        of=open(config.logFile, 'a')        
+        of.write(str(datetime.now()) + '\t' + message + '\n')
+        of.close()
+    
+    if config.logFile == 'system' and sys.platform == 'linux2' :        
+        syslog.syslog(message)     
+    
+
+def leave() :
+    log("Exiting")
+    sys.exit(0)
         
-    if config.speak and say:
+
+def timer(seconds) :
+    try :
+        while seconds > 0 :
+            lcd.lcd_byte(lcd.LCD_LINE_2, lcd.LCD_CMD)
+            lcd.message(str(seconds) + " seconds", style=2)
+            seconds -= 1
+            time.sleep(1)
+            
+        return 0
+    
+    except KeyboardInterrupt :
+        leave()
+        
+
+def speak(output) :   
+    if config.speak :
         a = os.system("echo " + output + " | festival --tts")
 
 
@@ -115,8 +143,7 @@ class Mailmanager() :
         self.mail.list()
         self.mail.select('inbox')
         result, data = mail.uid('search', None, "(UNSEEN)")    
-        if data[0] != '':
-            #print data
+        if data[0] != '':            
             time.sleep(.1)
             latest_email_uid = data[0].split()[-1]
             result, data = self.mail.uid('fetch', latest_email_uid, '(RFC822)')
@@ -179,45 +206,38 @@ class Commands() :
         mailmanager.sendEmail(sender, 'IP Info', ip)
 
 
-    def warn(self, command) :               
-        show("Warning!  " + command + " command received!")             
+    def warn(self, command) :  
         GPIO.output(config.lightsPin, True)
         lcd.home()
-        lcd.message(command + " in", style = 2)
+        lcd.message(command.capitalize() + " in", style = 2)
         timer(config.warningTime)
         GPIO.output(config.lightsPin, False)
 
     def openDoor(self) :
-        print "Open"
+        log("Placeholder for Open")
+        
 
-    def closeDoor(self) :
-        print "Close"
+    def closeDoor(self) :        
+        log("Placeholder for Close")
              
     def on(self) :
-         #lcd.clear()
-        lcd.home()
-        time.sleep(.1)
-        lcd.message("ON command")                        
-        show('Output is now on')
+        lcd.clear()
+        lcd.message("ON command")
         GPIO.output(config.lightsPin, True)        
         time.sleep(config.displayTime)
 
-    def off(self) :
-        #lcd.clear()
-        lcd.home()
-        time.sleep(.1)
-        lcd.message("OFF command")               
-        show('Output is now off')
+    def off(self) :    
+        lcd.home()       
+        lcd.message("OFF command") 
         GPIO.output(config.lightsPin, False)                                  
         time.sleep(config.displayTime)
 
-    def status(self) :
-        lcd.clear()
-        lcd.home()
-        time.sleep(.1)
-        lcd.message("Status request:\n")
+    def status(self) :         
+        lcd.clear()        
+        lcd.message("Status request:")
+        lcd.lcd_byte(lcd.LCD_LINE_2, lcd.LCD_CMD)
         lcd.message("Pin is " + str(state))
-        show("Status was requested. Pin state is " + state)
+        
 
     def readInput(self) :
         pinState = GPIO.input(config.inputPin)
@@ -230,22 +250,19 @@ mail = mailmanager.mail
 
 
 if __name__ == '__main__' :
+    log("Control Server started\n")
     try :
         state = 'off'
         GPIO.output(config.backlightPin, False)
         lcd.home()
         lcd.message('Message service', style=2)
         lcd.lcd_byte(lcd.LCD_LINE_2, lcd.LCD_CMD)
-        lcd.message('started', style=2)
-        print "Service started"
+        lcd.message('started', style=2)        
         time.sleep(3)
-        while True:
-            time.sleep(.1)
-            lcd.home()
-            time.sleep(.1)
+        while True:            
             lcd.clear()
-            time.sleep(.1)        
-            if config.verbose: show('Checking messages...', say=False)
+            time.sleep(.1)
+            if config.verbose: log('Checking messages...')
             lcd.lcd_byte(lcd.LCD_LINE_1, lcd.LCD_CMD)
             lcd.message("Checking", style=2)
             lcd.lcd_byte(lcd.LCD_LINE_2, lcd.LCD_CMD)
@@ -254,54 +271,57 @@ if __name__ == '__main__' :
             number = 0
             
             try :
-                
+                #raise TypeError("Test Error...")
                 name, sender, subj, text = mailmanager.getMail()            
                 
-                try :
+                if text :                
+                    text = text.strip()
+                    text = text.lower()
                     numList = sender.split('.')
                     number = numList[1]
-                    assert int(number)                
-
-                except :
-                    pass
+                    try :
+                        assert int(number)
+                    except :
+                        pass                    
                     
                 if sender in config.whiteList or number in config.whiteList:                
                     GPIO.output(config.backlightPin, True)
                     lcd.lcd_byte(lcd.LCD_LINE_1, lcd.LCD_CMD)
                     lcd.message("Command from:")
                     lcd.lcd_byte(lcd.LCD_LINE_2, lcd.LCD_CMD)
-                    lcd.message('\n' + name)                    
-                    show('Command received from ' + name)                      
+                    lcd.message('\n' + name) 
+                    log(text.capitalize() + " command received from " + name)
+                    time.sleep(.1)
                     
-                    if 'ip' in text.lower() :
+                    if 'ip' in text :
                         commands.ip()                
                                                         
-                    if 'on' in text.lower() :                
+                    if 'on' in text :                
                         commands.on()
                         state = 'on'               
 
-                    if 'off' in text.lower() :
+                    if 'off' in text :
                         commands.off()           
                         state = 'off'
 
-                    if 'open' in text.lower() : 
+                    if 'open' in text : 
                         state = 'open'
-                        commands.warn(state)
+                        commands.warn('open')
                         commands.openDoor()
 
-                    if 'close' in text.lower() :
-                        state = 'closed'
-                        commands.warn(state)
+                    if 'close' in text :
+                        state = 'closed' 
+                        commands.warn('close')
                         commands.closeDoor()
                         
 
-                    if not 'noack' in text or 'status' in text.lower(): 
+                    if not 'noack' in text or 'status' in text: 
                         if 'status' in text :
                             commands.status()
                         
                         t = 'Input is ' + str(commands.readInput()) + '\r\nOutput is ' + str(state)  
 
-                        if config.verbose : show('Sending reply to ' + sender)
+                        if config.verbose : log('Sending reply to ' + sender)
                         mailmanager.sendEmail(sender, 'Status report', t)
                         time.sleep(config.displayTime)
                     
@@ -309,25 +329,33 @@ if __name__ == '__main__' :
                 
                 
 
-            except Exception, detail :
-                print "ERROR: " + str(detail)
-                of.write(str(time.time()) + "\tError: " + str(detail) + '\n')                
+            except Exception, detail :                
+                log("Error: " + str(detail) + '\n')
+                           
                 lcd.clear()
-                lcd.message("Restarting server!", style=2)
+                lcd.message("Restarting in", style=2)
                 try :
                     mailmanager.stop()
-                except :
-                    pass
-                timer(config.sleepTime)
-                lcd.clear()
-                lcd.message("Retrying...", style=2)
-                mailmanager.__init__(login, password)
-                time.sleep(3)
+                    
+                except Exception, detail:
+                    #of.write(str(datetime.now()) + "\tError: " + str(detail) + '\n')
+                    log("Error: " + str(detail))                  
+                    
+                    try :
+                        timer(config.sleepTime)
+                        lcd.clear()
+                        lcd.message("Retrying...", style=2)
+                        log("Retrying connection")
+                        mailmanager.__init__(login, password)
+                        time.sleep(3)
+                        
+                    except :
+                        pass
                 
             GPIO.output(config.backlightPin, False)
             if config.verbose :    
-                show("Sleeping for " + str(config.sleepTime) + " seconds", say=False)
-            lcd.home()
+                log("Sleeping for " + str(config.sleepTime) + " seconds")
+                
             lcd.clear()
             time.sleep(.1)
             lcd.message("Sleeping for", style=2)
@@ -335,7 +363,7 @@ if __name__ == '__main__' :
     
         
     except KeyboardInterrupt() :
-        of.close()
+        leave()
                          
     
 

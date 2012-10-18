@@ -117,6 +117,7 @@ def home() :
 
 def clear() :
   lcd_byte(0x01, LCD_CMD)
+  time.sleep(.01)
   
 
 def lcd_string(message,style=1):
