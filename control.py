@@ -34,59 +34,64 @@ import email
 import sys
 import smtplib
 import os
-import controlConfig
 from datetime import datetime
 import lcd as lcd
+import ConfigParser
 
 if sys.platform == 'linux2' :
     import syslog
 
-state = 'off'
-config = controlConfig.Configuration()
 
-login = sys.argv[1]
-password = sys.argv[2]
+class Configuration() :
+    def __init__(self) :
+        '''
+        #   ________Pinout______
+        #   GPIO #      Function
+        #   21          Enable (Active low)
+        #   22          Switch Input
+        #   10          Output           
+        #   9           Lights
+        #   11          Backlight
+        #   18          LCD 14
+        #   23          LCD 13
+        #   24          LCD 12
+        #   25 `        LCD 11
+        #   8           LCD 6
+        #   7           LCD 4
+        '''
+        self.configFile  = ConfigParser.SafeConfigParser()
+        self.configFile.read('control.cfg')
+        self. whiteList = {}
+        self.whiteList = self.configFile.get('Email', 'WhiteList').split(' ')
+        self.sleepTime = self.configFile.getint('Email', 'Interval')
+        self.approvedSubject = self.configFile.get('Email', 'Subject')
 
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(config.backlightPin, GPIO.OUT)
-GPIO.setup(config.enablePin, GPIO.OUT)
-GPIO.setup(config.outputPin, GPIO.OUT)
-GPIO.setup(config.lightsPin, GPIO.OUT)
-GPIO.setup(config.inputPin, GPIO.IN)
-GPIO.setup(config.LCD_RS, GPIO.OUT)
-GPIO.setup(config.LCD_E, GPIO.OUT)
-GPIO.setup(config.LCD_D4, GPIO.OUT)
-GPIO.setup(config.LCD_D5, GPIO.OUT)
-GPIO.setup(config.LCD_D6, GPIO.OUT)
-GPIO.setup(config.LCD_D7, GPIO.OUT)
+        self.backlightPin = self.configFile.getint('Hardware', 'Backlight')
+        self.enablePin = self.configFile.getint('Hardware', 'Enable')
+        self.outputPin = self.configFile.getint('Hardware', 'Output')
+        self.lightsPin = self.configFile.getint('Hardware', 'Lights')
+        self.inputPin = self.configFile.getint('Hardware', 'Input')
 
-GPIO.output(config.enablePin, False)
-GPIO.output(config.backlightPin, False)
-GPIO.output(config.lightsPin, False)
-GPIO.output(config.outputPin, False)
+        self.LCD_E = self.configFile.getint('Hardware', 'LCD_E')
+        self.LCD_RS = self.configFile.getint('Hardware', 'LCD_RS')
+        self.LCD_D4 = self.configFile.getint('Hardware', 'LCD_D4')
+        self.LCD_D5 = self.configFile.getint('Hardware', 'LCD_D5')
+        self.LCD_D6 = self.configFile.getint('Hardware', 'LCD_D6')
+        self.LCD_D7 = self.configFile.getint('Hardware', 'LCD_D7')
 
-GPIO.output(config.backlightPin, True)
+        s = self.configFile.get('Configuration', 'Speak')
+        if s.lower() == 'true' : self.speak = True
+        else : self.speak = False
+        self.verbose = self.configFile.get('Configuration', 'Verbose')
+        self.displayTime = self.configFile.getint('Configuration', 'DisplayTime')
+        self.warningTime = self.configFile.getint('Configuration', 'WarningTime')
+        self.logFile = self.configFile.get('Configuration', 'Logfile')
 
-#dataPins = [config.LCD_D4, config.LCD_D5, config.LCD_D6, config.LCD_D7]
-#lcd = Adafruit_CharLCD(pin_rs=config.LCD_RS, pin_e=config.LCD_E, pins_db=dataPins)
-#lcd.begin(16,1)
+        if self.verbose == 'True' :  self.verbose = True
+        else : self.verbose = False
 
-lcd.LCD_RS = config.LCD_RS
-lcd.LCD_E  = config.LCD_E
-lcd.LCD_D4 = config.LCD_D4
-lcd.LCD_D5 = config.LCD_D5
-lcd.LCD_D6 = config.LCD_D6
-lcd.LCD_D7 = config.LCD_D7
-lcd.LED_ON = config.backlightPin
-
-lcd.lcd_init()
-lcd.message = lcd.lcd_string        # Keeps some compatibility with the Adafruit module
-
-if config.verbose == 'True' :  config.verbose = True
-else : config.verbose = False
-
-if config.speak == 'True' : config.speak = True
-else : config.speak = False
+        if self.speak == 'True' : self.speak = True
+        else : self.speak = False
 
 
 def log(message) :    
@@ -141,7 +146,7 @@ class Mailmanager() :
 
     def getMail(self) :
         self.mail.list()
-        self.mail.select('inbox')
+        self.mail.select()
         result, data = mail.uid('search', None, "(UNSEEN)")    
         if data[0] != '':            
             time.sleep(.1)
@@ -209,7 +214,7 @@ class Commands() :
     def warn(self, command) :  
         GPIO.output(config.lightsPin, True)
         lcd.home()
-        lcd.message(command.capitalize() + " in", style = 2)
+        lcd.message(command + " in", style = 2)
         timer(config.warningTime)
         GPIO.output(config.lightsPin, False)
 
@@ -243,14 +248,57 @@ class Commands() :
         pinState = GPIO.input(config.inputPin)
         return pinState
 
+def init() :
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setup(config.backlightPin, GPIO.OUT)
+    GPIO.setup(config.enablePin, GPIO.OUT)
+    GPIO.setup(config.outputPin, GPIO.OUT)
+    GPIO.setup(config.lightsPin, GPIO.OUT)
+    GPIO.setup(config.inputPin, GPIO.IN)
+    GPIO.setup(config.LCD_RS, GPIO.OUT)
+    GPIO.setup(config.LCD_E, GPIO.OUT)
+    GPIO.setup(config.LCD_D4, GPIO.OUT)
+    GPIO.setup(config.LCD_D5, GPIO.OUT)
+    GPIO.setup(config.LCD_D6, GPIO.OUT)
+    GPIO.setup(config.LCD_D7, GPIO.OUT)
 
-commands = Commands()
-mailmanager = Mailmanager(login, password)
-mail = mailmanager.mail
+    GPIO.output(config.enablePin, False)
+    GPIO.output(config.backlightPin, False)
+    GPIO.output(config.lightsPin, False)
+    GPIO.output(config.outputPin, False)
 
+    GPIO.output(config.backlightPin, True)
+    
+
+
+config = Configuration()
 
 if __name__ == '__main__' :
+    config = Configuration()
+    commands = Commands()
+    
+    init()
+
+    lcd.LCD_RS = config.LCD_RS
+    lcd.LCD_E  = config.LCD_E
+    lcd.LCD_D4 = config.LCD_D4
+    lcd.LCD_D5 = config.LCD_D5
+    lcd.LCD_D6 = config.LCD_D6
+    lcd.LCD_D7 = config.LCD_D7
+    lcd.LED_ON = config.backlightPin
+    
+    state = 'off'    
+
+    login = sys.argv[1]
+    password = sys.argv[2]
+    
+    mailmanager = Mailmanager(login, password)
+    mail = mailmanager.mail
+
+    lcd.lcd_init()
+    
     log("Control Server started\n")
+    
     try :
         state = 'off'
         GPIO.output(config.backlightPin, False)
@@ -300,7 +348,7 @@ if __name__ == '__main__' :
                         commands.on()
                         state = 'on'               
 
-                    if 'off' in text :
+                    if 'off' in text :              
                         commands.off()           
                         state = 'off'
 
@@ -334,23 +382,24 @@ if __name__ == '__main__' :
                            
                 lcd.clear()
                 lcd.message("Restarting in", style=2)
+                #try :
+                    #mailmanager.stop()
+                    
+                #except Exception, detail:
+                    #of.write(str(datetime.now()) + "\tError: " + str(detail) + '\n')
+                 #   log("Error: " + str(detail))                  
+                    
                 try :
-                    mailmanager.stop()
+                    timer(config.sleepTime)
+                    lcd.clear()
+                    lcd.message("Retrying...", style=2)
+                    log("Retrying connection")
+                    mailmanager.__init__(login, password)
+                    time.sleep(3)
                     
                 except Exception, detail:
-                    #of.write(str(datetime.now()) + "\tError: " + str(detail) + '\n')
-                    log("Error: " + str(detail))                  
-                    
-                    try :
-                        timer(config.sleepTime)
-                        lcd.clear()
-                        lcd.message("Retrying...", style=2)
-                        log("Retrying connection")
-                        mailmanager.__init__(login, password)
-                        time.sleep(3)
-                        
-                    except :
-                        pass
+                    log("Error: " + detail )
+                    pass
                 
             GPIO.output(config.backlightPin, False)
             if config.verbose :    

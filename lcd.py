@@ -38,7 +38,10 @@ LCD_D4 = 25
 LCD_D5 = 24
 LCD_D6 = 23
 LCD_D7 = 18
-LED_ON = 15
+LED_ON = 11
+
+ON = True
+OFF= False
 
 # Define some device constants
 LCD_WIDTH = 16    # Maximum characters per line
@@ -102,7 +105,19 @@ def main():
   # Turn off backlight
   GPIO.output(LED_ON, False)
 
+def backlight(state) :
+  GPIO.output(LED_ON, state)
+
 def lcd_init():
+  GPIO.setmode(GPIO.BCM)       # Use BCM GPIO numbers
+  GPIO.setup(LCD_E, GPIO.OUT)  # E
+  GPIO.setup(LCD_RS, GPIO.OUT) # RS
+  GPIO.setup(LCD_D4, GPIO.OUT) # DB4
+  GPIO.setup(LCD_D5, GPIO.OUT) # DB5
+  GPIO.setup(LCD_D6, GPIO.OUT) # DB6
+  GPIO.setup(LCD_D7, GPIO.OUT) # DB7
+  GPIO.setup(LED_ON, GPIO.OUT) # Backlight enable
+  
   # Initialise display
   lcd_byte(0x33,LCD_CMD)
   lcd_byte(0x32,LCD_CMD)
@@ -118,7 +133,9 @@ def home() :
 def clear() :
   lcd_byte(0x01, LCD_CMD)
   time.sleep(.01)
-  
+
+def message(message, style=1) :
+  lcd_string(message, style=style)
 
 def lcd_string(message,style=1):
   # Send string to display
