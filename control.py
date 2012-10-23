@@ -41,6 +41,8 @@ import ConfigParser
 if sys.platform == 'linux2' :
     import syslog
 
+opened = True
+closed = False
 
 class Configuration() :
     def __init__(self) :
@@ -86,6 +88,9 @@ class Configuration() :
         self.displayTime = self.configFile.getint('Configuration', 'DisplayTime')
         self.warningTime = self.configFile.getint('Configuration', 'WarningTime')
         self.logFile = self.configFile.get('Configuration', 'Logfile')
+        self.holdTime = self.configFile.getfloat('Configuration', 'HoldTime')
+        self.debounceTime = self.configFile.getfloat('Configuration', 'Debounce')
+        self.transitTime = self.configFile.getint('Configuration', 'TransitTime')
 
         if self.verbose == 'True' :  self.verbose = True
         else : self.verbose = False
@@ -219,11 +224,21 @@ class Commands() :
         GPIO.output(config.lightsPin, False)
 
     def openDoor(self) :
-        log("Placeholder for Open")
+        log("Opening door")
+        self.toggleDoor()
+
+    def toggleDoor(self) :
+        GPIO.output(config.outputPin, True)
+        time.sleep(config.holdTime)
+        GPIO.output(config.outputPin, False)
+        time.sleep(config.holdTime)
+        GPIO.output(config.outputPin, True)
         
 
     def closeDoor(self) :        
-        log("Placeholder for Close")
+        log("Closing")        
+        self.toggleDoor()
+        
              
     def on(self) :
         lcd.clear()
@@ -239,14 +254,19 @@ class Commands() :
 
     def status(self) :         
         lcd.clear()        
-        lcd.message("Status request:")
+        lcd.message("Status request:") 
         lcd.lcd_byte(lcd.LCD_LINE_2, lcd.LCD_CMD)
         lcd.message("Pin is " + str(state))
         
 
-    def readInput(self) :
+    def readInput(self) :        
         pinState = GPIO.input(config.inputPin)
-        return pinState
+        time.sleep(config.debounceTime)
+        if GPIO.input(config.inputPin) == pinState :            
+            return pinState
+        else :
+            time.sleep(config.debounceTime)
+        return GPIO.input(config.inputPin)
 
 def init() :
     GPIO.setmode(GPIO.BCM)
@@ -265,8 +285,7 @@ def init() :
     GPIO.output(config.enablePin, False)
     GPIO.output(config.backlightPin, False)
     GPIO.output(config.lightsPin, False)
-    GPIO.output(config.outputPin, False)
-
+    GPIO.output(config.outputPin, True)
     GPIO.output(config.backlightPin, True)
     
 
@@ -276,8 +295,11 @@ config = Configuration()
 if __name__ == '__main__' :
     config = Configuration()
     commands = Commands()
+    t = ''
     
     init()
+
+    timeCounter = 0
 
     lcd.LCD_RS = config.LCD_RS
     lcd.LCD_E  = config.LCD_E
@@ -339,7 +361,7 @@ if __name__ == '__main__' :
                     lcd.lcd_byte(lcd.LCD_LINE_2, lcd.LCD_CMD)
                     lcd.message('\n' + name) 
                     log(text.capitalize() + " command received from " + name)
-                    time.sleep(.1)
+                    time.sleep(3)
                     
                     if 'ip' in text :
                         commands.ip()                
@@ -353,41 +375,66 @@ if __name__ == '__main__' :
                         state = 'off'
 
                     if 'open' in text : 
-                        state = 'open'
-                        commands.warn('open')
-                        commands.openDoor()
+                        state = 'opened'
+                        if commands.readInput() == closed :
+                            commands.warn('Open')
+                            commands.toggleDoor()
+                            lcd.lcd_byte(lcd.LCD_LINE_1, lcd.LCD_CMD)
+                            lcd.message("Waiting for door", style=2)  
+                            timer(config.transitTime)
+                            if commands.readInput() == opened :                                
+                                log("Door opened")
+                                t = "Door opened"
+
+                            else :
+                                log("Move Error!")
+                                t = "The door did not open correctly"
+                            
+                            log("Door opened")
+                            
+                        else :
+                            t = "Already open.  Nothing done"
+                            
 
                     if 'close' in text :
                         state = 'closed' 
-                        commands.warn('close')
-                        commands.closeDoor()
+                        if commands.readInput() == opened :   
+                            commands.warn('Close')
+                            commands.toggleDoor()
+                            lcd.lcd_byte(lcd.LCD_LINE_1, lcd.LCD_CMD)
+                            lcd.message("Waiting for door...", style=2)  
+                            timer(config.transitTime)
+                            if commands.readInput() == closed :                                
+                                log("Door closed")
+                                t = "Door Closed"
+
+                            else :
+                                log("Move Error!")
+                                t = "The door did not close correctly"
+
+                        else :
+                            t = "Already closed.  Nothing done"                            
                         
 
                     if not 'noack' in text or 'status' in text: 
                         if 'status' in text :
                             commands.status()
-                        
-                        t = 'Input is ' + str(commands.readInput()) + '\r\nOutput is ' + str(state)  
+                            
+                        if not t:
+                            t = 'Input is ' + str(commands.readInput()) + '\r\nOutput is ' + str(state)  
 
                         if config.verbose : log('Sending reply to ' + sender)
                         mailmanager.sendEmail(sender, 'Status report', t)
                         time.sleep(config.displayTime)
-                    
-           # except smtplib.socket.socketerror :
-                
+
+                    t = ''
                 
 
             except Exception, detail :                
                 log("Error: " + str(detail) + '\n')
                            
                 lcd.clear()
-                lcd.message("Restarting in", style=2)
-                #try :
-                    #mailmanager.stop()
-                    
-                #except Exception, detail:
-                    #of.write(str(datetime.now()) + "\tError: " + str(detail) + '\n')
-                 #   log("Error: " + str(detail))                  
+                lcd.message("Restarting in", style=2)               
                     
                 try :
                     timer(config.sleepTime)
@@ -398,7 +445,7 @@ if __name__ == '__main__' :
                     time.sleep(3)
                     
                 except Exception, detail:
-                    log("Error: " + detail )
+                    log("Error: " + str(detail) )
                     pass
                 
             GPIO.output(config.backlightPin, False)
