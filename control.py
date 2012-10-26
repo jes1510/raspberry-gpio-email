@@ -44,6 +44,8 @@ if sys.platform == 'linux2' :
 opened = True
 closed = False
 
+class mailError(Exception): pass
+
 class Configuration() :
     def __init__(self) :
         '''
@@ -126,7 +128,21 @@ def timer(seconds) :
     
     except KeyboardInterrupt :
         leave()
-        
+
+def waitUntil(seconds, state=False) :
+    try :
+        while seconds > 0 :
+            lcd.lcd_byte(lcd.LCD_LINE_2, lcd.LCD_CMD)
+            lcd.message(str(seconds) + " seconds", style=2)
+            seconds -= 1
+            time.sleep(1)
+            pinstate = commands.readInput()            
+            if pinstate == state :                
+                break             
+        return 0
+    
+    except KeyboardInterrupt :
+        leave()
 
 def speak(output) :   
     if config.speak :
@@ -151,21 +167,24 @@ class Mailmanager() :
 
     def getMail(self) :
         self.mail.list()
-        self.mail.select()
-        result, data = mail.uid('search', None, "(UNSEEN)")    
-        if data[0] != '':            
-            time.sleep(.1)
-            latest_email_uid = data[0].split()[-1]
-            result, data = self.mail.uid('fetch', latest_email_uid, '(RFC822)')
-            raw_email = data[0][1]   
-            message = email.message_from_string(raw_email)
-            name, sender = self.get_sender(message)
-            subj = email.utils.parseaddr(message['Subject'])[1]
-            text = self.getBody(message) 
-            return name, sender, subj, text
-        
+        status, msgs = self.mail.select()
+        if status == 'OK' :
+            result, data = self.mail.uid('search', None, "(UNSEEN)")    
+            if data[0] != '':            
+                time.sleep(.1)
+                latest_email_uid = data[0].split()[-1]
+                result, data = self.mail.uid('fetch', latest_email_uid, '(RFC822)')
+                raw_email = data[0][1]   
+                message = email.message_from_string(raw_email)
+                name, sender = self.get_sender(message)
+                subj = email.utils.parseaddr(message['Subject'])[1]
+                text = self.getBody(message) 
+                return name, sender, subj, text
+            
+            else :
+                return 0,0,0,0
         else :
-            return 0, 0, 0, 0
+            raise mailError('Bad status from server')
 
     def stop(self) :
         self.mail.close()
@@ -381,19 +400,17 @@ if __name__ == '__main__' :
                             commands.toggleDoor()
                             lcd.lcd_byte(lcd.LCD_LINE_1, lcd.LCD_CMD)
                             lcd.message("Waiting for door", style=2)  
-                            timer(config.transitTime)
-                            if commands.readInput() == opened :                                
-                                log("Door opened")
+                            waitUntil(config.transitTime, opened)
+                            if commands.readInput() == opened : 
                                 t = "Door opened"
 
-                            else :
-                                log("Move Error!")
-                                t = "The door did not open correctly"
+                            else :                                
+                                t = "Open Error!"
                             
                             log("Door opened")
                             
                         else :
-                            t = "Already open.  Nothing done"
+                            t = "Already open"
                             
 
                     if 'close' in text :
@@ -403,17 +420,15 @@ if __name__ == '__main__' :
                             commands.toggleDoor()
                             lcd.lcd_byte(lcd.LCD_LINE_1, lcd.LCD_CMD)
                             lcd.message("Waiting for door...", style=2)  
-                            timer(config.transitTime)
-                            if commands.readInput() == closed :                                
-                                log("Door closed")
+                            waitUntil(config.transitTime, closed)
+                            if commands.readInput() == closed : 
                                 t = "Door Closed"
 
-                            else :
-                                log("Move Error!")
-                                t = "The door did not close correctly"
+                            else :                                
+                                t = "Close Error!"
 
                         else :
-                            t = "Already closed.  Nothing done"                            
+                            t = "Already closed"                            
                         
 
                     if not 'noack' in text or 'status' in text: 
@@ -421,8 +436,14 @@ if __name__ == '__main__' :
                             commands.status()
                             
                         if not t:
-                            t = 'Input is ' + str(commands.readInput()) + '\r\nOutput is ' + str(state)  
-
+                            if commands.readInput() == closed :
+                                t = 'Closed'
+                            if commands.readInput() == opened :
+                                t = 'Opened'                            
+                            
+                        lcd.clear()
+                        lcd.message(t, style=2)
+                        log(t)
                         if config.verbose : log('Sending reply to ' + sender)
                         mailmanager.sendEmail(sender, 'Status report', t)
                         time.sleep(config.displayTime)
@@ -437,10 +458,12 @@ if __name__ == '__main__' :
                 lcd.message("Restarting in", style=2)               
                     
                 try :
+                    #mailmanager.mail.close()
                     timer(config.sleepTime)
                     lcd.clear()
-                    lcd.message("Retrying...", style=2)
-                    log("Retrying connection")
+                    lcd.message("Retrying in", style=2)
+                    waituntil(10, state=False)
+                    log("Retrying connection")                    
                     mailmanager.__init__(login, password)
                     time.sleep(3)
                     
@@ -456,6 +479,7 @@ if __name__ == '__main__' :
             time.sleep(.1)
             lcd.message("Sleeping for", style=2)
             timer(config.sleepTime )
+            
     
         
     except KeyboardInterrupt() :
