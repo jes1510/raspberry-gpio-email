@@ -462,7 +462,7 @@ if __name__ == '__main__' :
                     timer(config.sleepTime)
                     lcd.clear()
                     lcd.message("Retrying in", style=2)
-                    waituntil(10, state=False)
+                    waitUntil(10, state=False)
                     log("Retrying connection")                    
                     mailmanager.__init__(login, password)
                     time.sleep(3)
