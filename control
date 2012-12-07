@@ -1,0 +1,30 @@
+#!/bin/bash
+
+
+case "$1" in
+	start)
+	if [ ! -f /var/lock/control ] 
+	then
+	  echo "Starting control script"
+	  cd /home/pi/code/gpio/
+	  sudo /home/pi/code/gpio/start.sh &
+	  touch /var/lock/control
+
+	else
+	  echo "The script is already running!"
+	fi
+	;;
+
+	stop)
+	  echo "Stopping control script"
+	  sudo killall control.py
+	  sudo rm -f /var/lock/control
+	;;
+
+	*)
+	  echo "Usage: /etc/init.d/control start|stop"
+	;;
+
+esac
+exit 0
+
