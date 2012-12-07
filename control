@@ -1,13 +1,17 @@
 #!/bin/bash
 
+if [ -z $TOP_DIR ] ; then
+TOP_DIR=/home/pi/code/raspberry-gpio-email/
+fi
+
 
 case "$1" in
 	start)
 	if [ ! -f /var/lock/control ] 
 	then
 	  echo "Starting control script"
-	  cd /home/pi/code/gpio/
-	  sudo /home/pi/code/gpio/start.sh &
+	  cd  $TOP_DIR
+	  sudo $TOP_DIR/start.sh &
 	  touch /var/lock/control
 
 	else

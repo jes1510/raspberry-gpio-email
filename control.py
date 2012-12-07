@@ -289,6 +289,7 @@ class Commands() :
 
 def init() :
     GPIO.setmode(GPIO.BCM)
+    GPIO.setwarnings(False)
     GPIO.setup(config.backlightPin, GPIO.OUT)
     GPIO.setup(config.enablePin, GPIO.OUT)
     GPIO.setup(config.outputPin, GPIO.OUT)
