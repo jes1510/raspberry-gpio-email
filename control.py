@@ -32,11 +32,19 @@ import time
 import imaplib
 import email
 import sys
+import traceback
 import smtplib
 import os
 from datetime import datetime
 import lcd as lcd
 import ConfigParser
+import email
+import email.mime.application
+from email.mime.image import MIMEImage 
+from email.mime.text import MIMEText
+#import email.encoders
+#import email.mime.text
+#import email.mime.base
 
 if sys.platform == 'linux2' :
 	import syslog
@@ -96,6 +104,7 @@ class Configuration() :
 		self.camera = self.configFile.get('Configuration', 'Camera')
 		self.tempDirectory = self.configFile.get('Configuration', 'TempDirectory')
 		self.resolution = self.configFile.get('Configuration', 'Resolution')
+		self.pictureName = self.configFile.get('Configuration', 'PictureName')
 
 		if self.verbose == 'True' :  self.verbose = True
 		else : self.verbose = False
@@ -200,10 +209,39 @@ class Mailmanager() :
 		smtpserver.starttls()
 		smtpserver.ehlo
 		smtpserver.login(login, password)
-		header = 'To:' + recipient + '\n' + 'From: ' + login + '\n' + 'Subject: ' + subject+ ' \n'
-		msg = header + '\n '+ message + '\n\n'        
-		smtpserver.sendmail(login, recipient, msg)
+		log("Constructing Message")
+		msg = email.MIMEMultipart.MIMEMultipart('mixed')
+		attachment = config.tempDirectory + '/' + config.pictureName
+		msg['From'] = login
+		msg['To'] = recipient
+		msg['Subject'] = subject
+		
+		#msgText = MIMEText('<b>%s</b><br><img src="cid:"' + config.pictureName + '"><br>' % message, 'html')   
+		msg.attach(MIMEText(message))   # Added, and edited the previous line
+		
+		try :
+			numList = sender.split('.')
+			number = numList[1]
+			assert int(number)
+			log("From text message, MMS not supported.  No picture sent")
+									
+		except :  
+		
+			fp = open(attachment, 'rb')   
+			log("Reading attachement")                                                 
+			img = MIMEImage(fp.read())
+			fp.close()
+			log("Attaching message")
+			msg.attach(img)
+		
+		#header = 'To:' + recipient + '\n' + 'From: ' + login + '\n' + 'Subject: ' + subject+ ' \n'
+		#msg = header + '\n '+ message + '\n\n'   
+		log("Sending message")
+		smtpserver.sendmail(login, recipient, msg.as_string())
 		smtpserver.quit()
+		log("Done sending message")
+		#os.system("rm " + attachment)
+		
 
 	def get_sender(self,email_message) :
 		sender = email.utils.parseaddr(email_message['From'])    
@@ -274,10 +312,15 @@ class Commands() :
 		GPIO.output(config.lightsPin, False)                                  
 		time.sleep(config.displayTime)
 
-	def status(self) :         
-		out = os.system("fswebcam -r " + config.resolution + 
-					" -d " + config.camera + 
-					" " + config.tempDirectory + "/controlGrab.jpg")
+	def status(self) :      
+		log('Taking picture')
+		out = os.system("fswebcam -r " + config.resolution +
+					'--log syslog -q --jpeg -1' +
+					" -d " + config.camera + 					
+					" " + config.tempDirectory + "/" + 					
+					config.pictureName)
+		log("Camera app returned " + str(out))
+		
 		lcd.clear()        
 		lcd.message("Status request:") 
 		lcd.lcd_byte(lcd.LCD_LINE_2, lcd.LCD_CMD)
@@ -347,6 +390,8 @@ if __name__ == '__main__' :
 	
 	log("Control Server started\n")
 	
+	
+	
 	try :
 		state = 'off'
 		GPIO.output(config.backlightPin, False)
@@ -368,19 +413,23 @@ if __name__ == '__main__' :
 			
 			try :
 				#raise TypeError("Test Error...")
-				name, sender, subj, text = mailmanager.getMail()            
+				name, sender, subj, text = mailmanager.getMail()     
+				print sender
+				print subj
 				
 				if text :                
 					text = text.strip()
-					text = text.lower()
-					numList = sender.split('.')
-					number = numList[1]
+					text = text.lower()					
+					
 					try :
-						assert int(number)
+						numList = sender.split('.')
+						number = numList[1]
+						assert int(number)						
 					except :
 						pass                    
 					
-				if sender in config.whiteList or number in config.whiteList:                
+				if sender in config.whiteList or number in config.whiteList:  
+					
 					GPIO.output(config.backlightPin, True)
 					lcd.lcd_byte(lcd.LCD_LINE_1, lcd.LCD_CMD)
 					lcd.message("Command from:")
@@ -422,7 +471,7 @@ if __name__ == '__main__' :
 
 					if 'close' in text :
 						state = 'closed' 
-						if commands.readInput() == opened :   
+						if commands.readInput() == opened :  
 							commands.warn('Close')
 							commands.toggleDoor()
 							lcd.lcd_byte(lcd.LCD_LINE_1, lcd.LCD_CMD)
@@ -459,8 +508,9 @@ if __name__ == '__main__' :
 				
 
 			except Exception, detail :                
-				log("Error: " + str(detail) + '\n')
-						   
+				log("Error: " + str(detail) + '\n')				
+			#	err = traceback.print_exc()
+		#		log('Trace ___: ' + err	)			   
 				lcd.clear()
 				lcd.message("Restarting in", style=2)               
 					
