@@ -210,8 +210,8 @@ class Mailmanager() :
 		smtpserver.ehlo
 		smtpserver.login(login, password)
 		log("Constructing Message")
-		msg = email.MIMEMultipart.MIMEMultipart('mixed')
-		attachment = config.tempDirectory + '/' + config.pictureName
+		msg = email.MIMEMultipart.MIMEMultipart('mixed')	
+			
 		msg['From'] = login
 		msg['To'] = recipient
 		msg['Subject'] = subject
@@ -226,14 +226,17 @@ class Mailmanager() :
 			log("From text message, MMS not supported.  No picture sent")
 									
 		except :  
-		
-			fp = open(attachment, 'rb')   
-			log("Reading attachement")                                                 
-			img = MIMEImage(fp.read())
-			fp.close()
-			log("Attaching message")
-			msg.attach(img)
-		
+			try :
+				attachment = config.tempDirectory + '/' + config.pictureName
+				fp = open(attachment, 'rb')   
+				log("Reading attachement")                                                 
+				img = MIMEImage(fp.read())
+				fp.close()
+				log("Attaching message")
+				msg.attach(img)
+				
+			except Exception, detail :
+				log('Error attaching image: ' + str(detail))
 		#header = 'To:' + recipient + '\n' + 'From: ' + login + '\n' + 'Subject: ' + subject+ ' \n'
 		#msg = header + '\n '+ message + '\n\n'   
 		log("Sending message")
@@ -272,8 +275,17 @@ class Commands() :
 	def ip(self) :
 		lcd.home()
 		lcd.message("IP Request")
-		ip = self._getIP()
-		mailmanager.sendEmail(sender, 'IP Info', ip)
+		p = os.popen("ip addr show wlan0 | grep inet").readline().split()[1]
+		ip = p.split('/')[0]
+		#ip = self._getIP()
+		#print ip
+		log('IP Request from ' + sender)
+		log('Local IP: ' + ip)
+		lcd.message('IP_ Request', style=2)
+		lcd.lcd_byte(lcd.LCD_LINE_2, lcd.LCD_CMD)
+		lcd.message(ip, style=2)     
+		mailmanager.sendEmail(sender, 'Local IP', ip)
+		time.sleep(config.displayTime)
 
 
 	def warn(self, command) :  
@@ -414,8 +426,8 @@ if __name__ == '__main__' :
 			try :
 				#raise TypeError("Test Error...")
 				name, sender, subj, text = mailmanager.getMail()     
-				print sender
-				print subj
+				#print sender
+				#print subj
 				
 				if text :                
 					text = text.strip()
