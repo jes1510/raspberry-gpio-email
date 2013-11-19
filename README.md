@@ -13,14 +13,21 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/
 
+Use it at your own risk.  Assume that I have no idea what I am doing.
+
 This program establishes a connection to the gMail IMAP server and then  
-tt downloads the latest message and toggles the GPIO pin accordingly.
+downloads the latest message.  It will open or close the garage door
+by toggling the 'output' pin.  If the door is to be opened or closed
+then a warning is shown using a rotating light.  Messages are
+shown to the user by a 2 line LCD.  Data is logged to /var/log/messages.
+
 
 Acceptable commands
 
-'on':  Toggle GPIO pin HIGH
-'off':  Toggle GPIO pin LOW
-'status': read status of input pin 
+'open':  Toggles the 'ouput' pin low to open door.  Checks to make sure it opened.
+'close':  Toggles the 'output' pin low to close door.  Checks to make sure it closed.
+'status': read status of input pin to check door state.
+'ip': Sends the LOCAL ip address 
 
 The system is configured through a configuration file included in the package.
 The the pinout is configurable through the configuration file as well.  This
@@ -33,5 +40,8 @@ messages.  Make sure that the "forward texts to email" option is checked in the
 settings of Google Voice.
 
 The program should be launched with the login credentials and password
-as arguments.  The command can be put into a shell script with permissions
-set so no one else can read it for security.
+as arguments.  A shell script for launching the program as a daemon 
+is also included.
+
+GPIO pinout can be fou8nd here:
+http://elinux.org/images/2/2a/GPIOs.png
