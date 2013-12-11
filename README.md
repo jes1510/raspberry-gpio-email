@@ -43,5 +43,5 @@ The program should be launched with the login credentials and password
 as arguments.  A shell script for launching the program as a daemon 
 is also included.
 
-GPIO pinout can be fou8nd here:
+GPIO pinout can be found here:
 http://elinux.org/images/2/2a/GPIOs.png
